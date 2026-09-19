@@ -1,4 +1,4 @@
-import { useState,useEffect } from "react";
+import { useState,useEffect,useRef } from "react";
 import LiveMap from "./LiveMap";
 import {
   supabaseEnabled,
@@ -138,6 +138,11 @@ function App() {
   const [detectionError, setDetectionError] = useState("");
   const [roadRisk, setRoadRisk] = useState(null);
 const [cameraStream, setCameraStream] = useState(null);
+const [cameraError, setCameraError] = useState("");
+const [cameraResult, setCameraResult] = useState(null);
+const [isCameraScanning, setIsCameraScanning] = useState(false);
+const videoRef = useRef(null);
+const streamRef = useRef(null);
 const [imageDimensions, setImageDimensions] = useState({
   width: 1,
   height: 1
@@ -372,6 +377,26 @@ useEffect(() => {
       clearInterval(historyInterval);
     };
   }, []);
+  // Leaving the page or unmounting must switch the camera light off.
+  useEffect(() => {
+    if (activePage === "Camera") return;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setCameraStream(null);
+    }
+  }, [activePage]);
+
+  useEffect(
+    () => () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    },
+    [],
+  );
+
   const trafficIsLive = trafficStatus === "live" && trafficData !== null;
   const potholeApiLive = neuralStatus === "live" && neuralModels.pothole !== false;
   const potholeChip =
@@ -443,6 +468,120 @@ useEffect(() => {
     (overview?.active_alerts ?? alerts.length) +
     highDemandBuses.length +
     delayedBuses.length;
+
+  const releaseCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const openCamera = async () => {
+    setCameraError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      releaseCamera();
+      streamRef.current = stream;
+      setCameraStream(stream);
+    } catch (error) {
+      console.error("Camera error:", error);
+      setCameraError(
+        "Camera access was denied or unavailable. Allow camera permission in the browser, then try again.",
+      );
+    }
+  };
+
+  const closeCamera = () => {
+    releaseCamera();
+    setCameraStream(null);
+    setIsCameraScanning(false);
+  };
+
+  const captureAndDetect = async () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      setCameraError("The camera is still starting. Try again in a moment.");
+      return;
+    }
+
+    setIsCameraScanning(true);
+    setCameraError("");
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const snapshot = canvas.toDataURL("image/jpeg");
+
+    try {
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg"),
+      );
+
+      const post = async (path) => {
+        const body = new FormData();
+        body.append("image", blob, "camera.jpg");
+        const response = await fetch(apiUrl(path), { method: "POST", body });
+        if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+        return response.json();
+      };
+
+      const settled = await Promise.allSettled([
+        post("/api/vehicle-detect"),
+        post("/api/pothole-detect"),
+        post("/api/garbage-detect"),
+      ]);
+      const [vehicleData, potholeData, garbageData] = settled.map((item) =>
+        item.status === "fulfilled" ? item.value : null,
+      );
+
+      if (!vehicleData && !potholeData && !garbageData) {
+        setCameraResult(null);
+        setCameraError(
+          "The AI service could not analyse this frame. Check that YOLO shows LIVE, then capture again.",
+        );
+        return;
+      }
+
+      const potholes = potholeData?.detections ?? [];
+      const garbage = garbageData?.detections ?? [];
+
+      if (vehicleData) {
+        setVehicleCount(vehicleData.vehicle_count);
+        logDetection("vehicle", vehicleData.vehicles || []);
+      }
+      if (potholeData) logDetection("pothole", potholes);
+      if (garbageData) logDetection("garbage", garbage);
+
+      // Potholes and garbage raise civic alerts server-side, so pull the feed.
+      if (potholes.length > 0 || garbage.length > 0) {
+        fetchAlertsData()
+          .then((data) => setAlerts(Array.isArray(data) ? data : []))
+          .catch(() => {});
+      }
+
+      setCameraResult({
+        snapshot,
+        width: canvas.width,
+        height: canvas.height,
+        capturedAt: new Date(),
+        vehicleCount: vehicleData ? vehicleData.vehicle_count : null,
+        personCount: vehicleData ? vehicleData.person_count : null,
+        potholes: potholeData ? potholes : null,
+        garbage: garbageData ? garbage : null,
+        roadRisk: potholeData?.road_risk ?? null,
+      });
+    } catch (error) {
+      console.error("Camera detection error:", error);
+      setCameraResult(null);
+      setCameraError("Could not reach the AI service. Capture again once it is live.");
+    } finally {
+      setIsCameraScanning(false);
+    }
+  };
 
   const runTrafficSimulation = async () => {
     setSimulationStatus("loading");
@@ -1163,174 +1302,196 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
 {activePage === "Camera" && (
   <>
-    <h2 className="page-title">
-      Camera
-    </h2>
+    <div className="page-heading">
+      <div>
+        <span className="eyebrow">ON-DEVICE CAPTURE · YOLO ANALYSIS</span>
+        <h2 className="page-title">Camera</h2>
+        <p>Capture a frame and scan it for vehicles, potholes and garbage.</p>
+      </div>
+      <span className={`model-chip ${cameraStream ? "is-live" : "is-checking"}`}>
+        {cameraStream ? "CAMERA · STREAMING" : "CAMERA · IDLE"}
+      </span>
+    </div>
 
-    <section className="section-card">
+    <section className="section-card detector-shell">
 
-      <h2>
-        📷 Live Camera Detection
-      </h2>
+      <div className="detector-intro">
+        <div className="detector-icon">📷</div>
+        <div>
+          <h2>Live Camera Detection</h2>
+          <p>Nothing leaves this device until you capture a frame.</p>
+        </div>
+      </div>
 
-      <p>
-        Use your device camera for live road monitoring.
-      </p>
-
-      <div style={{ marginTop: "20px" }}>
+      <div className="camera-actions">
+        <button
+          className="primary-button"
+          onClick={openCamera}
+          disabled={Boolean(cameraStream)}
+        >
+          📷 {cameraStream ? "Camera running" : "Open camera"}
+        </button>
 
         <button
           className="primary-button"
-          onClick={async () => {
-            try {
-              const stream =
-                await navigator.mediaDevices.getUserMedia({
-                  video: true
-                });
-
-              console.log("Camera access granted", stream);
-
-              alert("Camera access granted successfully!");
-              setCameraStream(stream);
-            } catch (error) {
-              console.error("Camera error:", error);
-              alert("Camera access was denied or unavailable.");
-            }
-          }}
+          onClick={captureAndDetect}
+          disabled={!cameraStream || isCameraScanning}
         >
-          📷 Open Camera
+          {isCameraScanning ? "◌ Analysing…" : "🔍 Capture & analyse"}
         </button>
-        {cameraStream && (
-  <video
-    autoPlay
-    playsInline
-    ref={(video) => {
-      if (video) {
-        video.srcObject = cameraStream;
-      }
-    }}
-    style={{
-      width: "100%",
-      maxWidth: "600px",
-      marginTop: "20px",
-      borderRadius: "10px"
-    }}
-  />
-)}
-<button
-  className="primary-button"
- onClick={() => {
-  const video = document.querySelector("video");
 
-  if (!video) {
-    alert("Camera is not running.");
-    return;
-  }
-
-  const canvas = document.createElement("canvas");
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  const context = canvas.getContext("2d");
-
-  context.drawImage(
-    video,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  const imageData = canvas.toDataURL("image/jpeg");
-  canvas.toBlob(async (blob) => {
-  const formData = new FormData();
-
-  formData.append("image", blob, "camera.jpg");
- 
-  const vehicleResponse = await fetch(
-  apiUrl("/api/vehicle-detect"),
-  {
-    method: "POST",
-    body: formData,
-  }
-);
-
-const vehicleData = await vehicleResponse.json();
-
-console.log("Vehicle Detection:", vehicleData);
-
-setVehicleCount(vehicleData.vehicle_count);
-logDetection("vehicle", vehicleData.vehicles || []);
-
-alert(
-  `Vehicles detected: ${vehicleData.vehicle_count}`
-);
-
-  try {
-    const response = await fetch(
-      apiUrl("/api/pothole-detect"),
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
-    const data = await response.json();
-
-    console.log("AI Camera Detection:", data);
-    logDetection("pothole", data.detections || []);
-
-    alert(
-      `Potholes detected: ${data.detections.length}`
-    );
-    try{
-    const garbageResponse = await fetch(
-      apiUrl("/api/garbage-detect"),
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-
-    const garbageData = await garbageResponse.json();
-
-    console.log("Garbage Detection:", garbageData);
-    logDetection("garbage", garbageData.detections || []);
-
-    if (garbageData.detections && garbageData.detections.length > 0) {
-      fetchAlertsData()
-        .then((data) => setAlerts(Array.isArray(data) ? data : []))
-        .catch(() => {});
-
-      alert(
-`🗑️ Garbage detected: ${garbageData.detections.length}`
-      );
-    } else {
-      alert("✅ No garbage detected.");
-    }
-
-  } catch (error) {
-    console.error("Garbage AI error:", error);
-    alert("Could not connect to Garbage AI.");
-  }
-
-  } catch (error) {
-    console.error("Camera AI error:", error);
-    alert("Could not connect to Pothole AI.");
-  }
-}, "image/jpeg");
-
-  console.log("Captured camera image:", imageData);
-
-  alert("Camera image captured successfully!");
-}}
-  style={{ marginTop: "15px" }}
->
-  🕳️ Capture & Detect Potholes
-</button>
-
+        <button
+          className="primary-button is-quiet"
+          onClick={closeCamera}
+          disabled={!cameraStream}
+        >
+          ✕ Close camera
+        </button>
       </div>
+
+      {cameraStream && (
+        <div className="camera-stage">
+          <video
+            autoPlay
+            playsInline
+            muted
+            ref={(video) => {
+              videoRef.current = video;
+              if (video && video.srcObject !== cameraStream) {
+                video.srcObject = cameraStream;
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {cameraError && (
+        <div className="inline-error">
+          <span>!</span>
+          <div><strong>Camera unavailable</strong><p>{cameraError}</p></div>
+        </div>
+      )}
+
+      {cameraResult && (
+        <div className="detection-result">
+          <div className="result-header">
+            <div>
+              <span className="eyebrow">FRAME ANALYSED</span>
+              <h3>
+                Captured at{" "}
+                {cameraResult.capturedAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </h3>
+            </div>
+            <span
+              className={`result-count ${
+                cameraResult.potholes?.length || cameraResult.garbage?.length
+                  ? "has-risk"
+                  : ""
+              }`}
+            >
+              {(cameraResult.potholes?.length ?? 0) +
+                (cameraResult.garbage?.length ?? 0)}{" "}
+              issues
+            </span>
+          </div>
+
+          <div className="result-grid">
+            <div className="detection-canvas">
+              <img src={cameraResult.snapshot} alt="Captured frame" />
+              {(cameraResult.potholes ?? []).map((detection, index) => {
+                const [x1, y1, x2, y2] = detection.box;
+                return (
+                  <div
+                    className="detection-box"
+                    key={index}
+                    style={{
+                      left: `${(x1 / cameraResult.width) * 100}%`,
+                      top: `${(y1 / cameraResult.height) * 100}%`,
+                      width: `${((x2 - x1) / cameraResult.width) * 100}%`,
+                      height: `${((y2 - y1) / cameraResult.height) * 100}%`,
+                    }}
+                  >
+                    <span>#{index + 1} · {detection.confidence}%</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="result-panel">
+              <div className="camera-metrics">
+                <div>
+                  <small>Vehicles</small>
+                  <strong>{cameraResult.vehicleCount ?? "—"}</strong>
+                </div>
+                <div>
+                  <small>People</small>
+                  <strong>{cameraResult.personCount ?? "—"}</strong>
+                </div>
+                <div className={cameraResult.potholes?.length ? "is-risk" : ""}>
+                  <small>Potholes</small>
+                  <strong>{cameraResult.potholes?.length ?? "—"}</strong>
+                </div>
+                <div className={cameraResult.garbage?.length ? "is-risk" : ""}>
+                  <small>Garbage</small>
+                  <strong>{cameraResult.garbage?.length ?? "—"}</strong>
+                </div>
+              </div>
+
+              {cameraResult.roadRisk && (
+                <div className="assessment-score">
+                  <span>ROAD RISK</span>
+                  <strong>{cameraResult.roadRisk}</strong>
+                </div>
+              )}
+
+              {cameraResult.potholes?.length || cameraResult.garbage?.length ? (
+                <div className="detection-list">
+                  {(cameraResult.potholes ?? []).map((detection, index) => (
+                    <div key={`pothole-${index}`}>
+                      <span className="detection-index">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <p>
+                        <strong>Pothole detected</strong>
+                        <small>{detection.confidence}% confidence</small>
+                      </p>
+                    </div>
+                  ))}
+                  {(cameraResult.garbage ?? []).map((detection, index) => (
+                    <div key={`garbage-${index}`}>
+                      <span className="detection-index">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <p>
+                        <strong>{detection.label ?? "Garbage"} detected</strong>
+                        <small>{detection.confidence}% confidence</small>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="clear-result">
+                  <span>✓</span>
+                  <strong>No potholes or garbage</strong>
+                  <p>This frame looks clear. Civic alerts are raised automatically when something is found.</p>
+                </div>
+              )}
+
+              {(cameraResult.potholes === null ||
+                cameraResult.garbage === null ||
+                cameraResult.vehicleCount === null) && (
+                <small className="camera-partial">
+                  Some detectors did not respond for this frame.
+                </small>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </section>
   </>

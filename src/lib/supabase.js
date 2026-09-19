@@ -20,10 +20,6 @@ function asPercent(value) {
   return value <= 1 ? value * 100 : value;
 }
 
-export async function recordTrafficSnapshot() {
-  // traffic_realtime is written by the Flask API with the service role.
-}
-
 export async function recordDetection({ kind, count, confidence }) {
   if (!supabase) return;
 

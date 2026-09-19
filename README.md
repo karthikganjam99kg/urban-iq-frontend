@@ -36,7 +36,7 @@ is already moving.
 | 🚗 **Vehicle + Plate AI** | Counts vehicles, reads plates, scores rash motion | YOLO `yolo11n.pt` + EasyOCR |
 | 🏃 **Fitness & Sports** | Walk / jog / cycle safety verdicts from live congestion, plus a realtime detection feed | TomTom + Supabase Realtime |
 | 🚦 **Traffic Simulator** | Stress-test congestion scenarios before they happen | Congestion model |
-| 🔔 **Alerts** | Chronological civic incident stream | Flask incident store |
+| 🔔 **Alerts** | Chronological civic incident stream | Supabase `alerts` via the API |
 
 ## 🏗️ Architecture
 
@@ -68,17 +68,9 @@ By default `npm run dev` proxies `/api` to `http://127.0.0.1:5001`, so you can r
 locally. Leave `VITE_API_BASE_URL` unset in development to use that proxy; production falls
 back to the hosted Space automatically.
 
-### Run the whole stack locally
+### Run the API locally
 
-```bash
-# terminal 1 — neural API (port 5001, because macOS AirPlay squats on 5000)
-pip install -r requirements.txt
-echo "TOMTOM_API_KEY=your_key" > .env
-gunicorn --bind 127.0.0.1:5001 --workers 1 --threads 2 --timeout 300 src.backend.app:app
-
-# terminal 2 — command centre
-npm run dev
-```
+This repo is UI-only. Clone [urban-iq-backend](https://github.com/karthikganjam99kg/urban-iq-backend) and follow its README (Gunicorn on port 5001). Then `npm run dev` here; Vite proxies `/api` to that process.
 
 ## 🔑 Environment
 

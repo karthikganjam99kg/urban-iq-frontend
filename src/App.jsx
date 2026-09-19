@@ -2,7 +2,6 @@ import { useState,useEffect } from "react";
 import LiveMap from "./LiveMap";
 import {
   supabaseEnabled,
-  recordTrafficSnapshot,
   recordDetection,
   fetchRecentDetections,
   subscribeToDetections,
@@ -50,7 +49,6 @@ useEffect(() => {
 
         setTrafficData(data);
         setTrafficStatus("live");
-        recordTrafficSnapshot(data);
       } catch (error) {
         console.error("Traffic API error:", error);
         setTrafficStatus("offline");

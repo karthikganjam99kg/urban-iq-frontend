@@ -19,6 +19,100 @@ import {
 } from "./lib/api";
 import "./App.css";
 
+const BOOT_CHECK_NAMES = [
+  "traffic",
+  "vision",
+  "fleet",
+  "demand",
+  "overview",
+  "routes",
+  "fitness",
+];
+
+const BOOT_SERVICES = [
+  { label: "Traffic network", checks: ["traffic"] },
+  { label: "AI vision engine", checks: ["vision"] },
+  { label: "Fleet & telemetry", checks: ["fleet"] },
+  {
+    label: "City intelligence",
+    checks: ["demand", "overview", "routes", "fitness"],
+  },
+];
+
+function BootSplash({ checks, leaving }) {
+  const completed = BOOT_CHECK_NAMES.filter(
+    (name) => checks[name] !== "checking",
+  ).length;
+  const progress = Math.round((completed / BOOT_CHECK_NAMES.length) * 100);
+
+  const serviceState = (names) => {
+    const states = names.map((name) => checks[name]);
+    if (states.every((state) => state === "checking")) return "checking";
+    if (states.some((state) => state === "checking")) return "checking";
+    if (states.every((state) => state === "offline")) return "offline";
+    return "ready";
+  };
+
+  return (
+    <div
+      className={`boot-splash${leaving ? " is-leaving" : ""}`}
+      role="status"
+      aria-live="polite"
+      aria-label={`UrbanIQ is preparing city services, ${progress}% complete`}
+    >
+      <div className="boot-grid" aria-hidden="true" />
+      <div className="boot-glow boot-glow-one" aria-hidden="true" />
+      <div className="boot-glow boot-glow-two" aria-hidden="true" />
+
+      <div className="boot-panel">
+        <div className="boot-mark" aria-hidden="true">
+          <span className="boot-orbit boot-orbit-one" />
+          <span className="boot-orbit boot-orbit-two" />
+          <span className="boot-mark-core">⌁</span>
+        </div>
+
+        <div className="boot-brand">
+          <span>URBAN</span>IQ
+        </div>
+        <p className="boot-kicker">HYDERABAD CITY INTELLIGENCE OS</p>
+        <h1>Bringing the city online</h1>
+        <p className="boot-copy">
+          Connecting live traffic, fleet telemetry and AI services.
+        </p>
+
+        <div className="boot-progress" aria-hidden="true">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+
+        <div className="boot-services">
+          {BOOT_SERVICES.map((service) => {
+            const state = serviceState(service.checks);
+            return (
+              <div className={`boot-service ${state}`} key={service.label}>
+                <span className="boot-service-dot" aria-hidden="true" />
+                <span>{service.label}</span>
+                <small>
+                  {state === "checking"
+                    ? "Checking"
+                    : state === "offline"
+                      ? "Checked"
+                      : "Ready"}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="boot-footnote">
+          {completed === BOOT_CHECK_NAMES.length
+            ? "Command centre ready"
+            : `Running service checks · ${progress}%`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function describeBaseline(result) {
   const baseline = result.baseline;
   if (!baseline) {
@@ -67,7 +161,46 @@ const [overview, setOverview] = useState(null);
 const [routeData, setRouteData] = useState(null);
 const [fitnessData, setFitnessData] = useState(null);
 const [simulationStatus, setSimulationStatus] = useState("idle");
+const [bootChecks, setBootChecks] = useState(() =>
+  Object.fromEntries(BOOT_CHECK_NAMES.map((name) => [name, "checking"])),
+);
+const [minimumSplashElapsed, setMinimumSplashElapsed] = useState(false);
+const [showSplash, setShowSplash] = useState(true);
+const [splashLeaving, setSplashLeaving] = useState(false);
+
 useEffect(() => {
+  const minimumTimer = setTimeout(() => setMinimumSplashElapsed(true), 1800);
+  const maximumTimer = setTimeout(() => {
+    setSplashLeaving(true);
+    setTimeout(() => setShowSplash(false), 500);
+  }, 10000);
+
+  return () => {
+    clearTimeout(minimumTimer);
+    clearTimeout(maximumTimer);
+  };
+}, []);
+
+useEffect(() => {
+  const allSettled = BOOT_CHECK_NAMES.every(
+    (name) => bootChecks[name] !== "checking",
+  );
+  if (!minimumSplashElapsed || !allSettled || splashLeaving) return undefined;
+
+  const revealTimer = setTimeout(() => {
+    setSplashLeaving(true);
+    setTimeout(() => setShowSplash(false), 500);
+  }, 350);
+  return () => clearTimeout(revealTimer);
+}, [bootChecks, minimumSplashElapsed, splashLeaving]);
+
+useEffect(() => {
+    const markBootCheck = (name, state) => {
+      setBootChecks((current) =>
+        current[name] === state ? current : { ...current, [name]: state },
+      );
+    };
+
     const getTrafficData = async () => {
       try {
         const response = await fetch(apiUrl("/api/traffic"));
@@ -75,14 +208,17 @@ useEffect(() => {
 
         if (!response.ok || data?.error) {
           setTrafficStatus("offline");
+          markBootCheck("traffic", "offline");
           return;
         }
 
         setTrafficData(data);
         setTrafficStatus("live");
+        markBootCheck("traffic", "ready");
       } catch (error) {
         console.error("Traffic API error:", error);
         setTrafficStatus("offline");
+        markBootCheck("traffic", "offline");
       }
     };
 
@@ -107,11 +243,14 @@ useEffect(() => {
         if (response.ok && data?.status === "ok") {
           setNeuralStatus("live");
           setNeuralModels(data.models ?? {});
+          markBootCheck("vision", "ready");
         } else {
           setNeuralStatus("offline");
+          markBootCheck("vision", "offline");
         }
       } catch {
         setNeuralStatus("offline");
+        markBootCheck("vision", "offline");
       } finally {
         clearTimeout(timer);
       }
@@ -122,12 +261,15 @@ useEffect(() => {
         const data = await fetchDemandForecast();
         if (data?.status === "offline") {
           setDemandStatus("offline");
+          markBootCheck("demand", "offline");
           return;
         }
         setDemandForecast(data);
         setDemandStatus(data.status === "live" ? "live" : "collecting");
+        markBootCheck("demand", "ready");
       } catch {
         setDemandStatus("offline");
+        markBootCheck("demand", "offline");
       }
     };
 
@@ -136,13 +278,16 @@ useEffect(() => {
         const data = await fetchFleetData();
         if (data?.status === "offline") {
           setFleetStatus("offline");
+          markBootCheck("fleet", "offline");
           return;
         }
         setFleetBuses(Array.isArray(data.buses) ? data.buses : []);
         setFleetSummary(data.summary ?? null);
         setFleetStatus(data.status ?? "empty");
+        markBootCheck("fleet", "ready");
       } catch {
         setFleetStatus("offline");
+        markBootCheck("fleet", "offline");
       }
     };
 
@@ -152,9 +297,24 @@ useEffect(() => {
         fetchRoutesData(),
         fetchFitnessData(),
       ]);
-      if (results[0].status === "fulfilled") setOverview(results[0].value);
-      if (results[1].status === "fulfilled") setRouteData(results[1].value);
-      if (results[2].status === "fulfilled") setFitnessData(results[2].value);
+      if (results[0].status === "fulfilled") {
+        setOverview(results[0].value);
+        markBootCheck("overview", "ready");
+      } else {
+        markBootCheck("overview", "offline");
+      }
+      if (results[1].status === "fulfilled") {
+        setRouteData(results[1].value);
+        markBootCheck("routes", "ready");
+      } else {
+        markBootCheck("routes", "offline");
+      }
+      if (results[2].status === "fulfilled") {
+        setFitnessData(results[2].value);
+        markBootCheck("fitness", "ready");
+      } else {
+        markBootCheck("fitness", "offline");
+      }
     };
 
     getAlerts();
@@ -315,7 +475,11 @@ useEffect(() => {
   };
 
   return (
-    <div className="app">
+    <>
+      {showSplash && (
+        <BootSplash checks={bootChecks} leaving={splashLeaving} />
+      )}
+      <div className="app">
 
       {/* SIDEBAR */}
       <aside className="sidebar">
@@ -353,13 +517,18 @@ useEffect(() => {
           ))}
         </nav>
 
-        <div className="sidebar-bottom">
+        <a
+          className="sidebar-bottom"
+          href="/fleet-device.html"
+          aria-label="Open the UrbanIQ fleet device console"
+          title="Open fleet device console"
+        >
           <div className="sih-mark">SIH</div>
           <div>
             <strong>SIH26124</strong>
-            <span>Smart India Hackathon</span>
+            <span>Fleet device console ↗</span>
           </div>
-        </div>
+        </a>
 
       </aside>
 
@@ -2050,7 +2219,8 @@ alert(
 
       </main>
 
-    </div>
+      </div>
+    </>
   );
 }
 

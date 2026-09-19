@@ -481,7 +481,7 @@ getAlerts();
         Hyderabad traffic conditions
       </p>
 
-      {trafficData ? (
+      {trafficIsLive ? (
         <div className="prediction-box">
 
           <span>
@@ -506,7 +506,9 @@ getAlerts();
         </div>
       ) : (
         <p>
-          Loading traffic data...
+          {trafficStatus === "offline"
+            ? "Traffic feed offline — check the TomTom key on the API service."
+            : "Loading traffic data..."}
         </p>
       )}
 {selectedImage && (

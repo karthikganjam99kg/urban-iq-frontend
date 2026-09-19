@@ -185,12 +185,19 @@
       // Assignment links carry the bus and token in the fragment, which browsers
       // never send to the server. The fragment is cleared immediately so the
       // token is not left sitting in the address bar.
-      const assignment = new URLSearchParams(location.hash.slice(1));
-      const assignedBus = assignment.get("bus") || "";
-      const assignedToken = assignment.get("token") || "";
-      if (location.hash) {
+      let assignedBus = "";
+      let assignedToken = "";
+
+      function readAssignment() {
+        if (!location.hash) return false;
+        const assignment = new URLSearchParams(location.hash.slice(1));
+        assignedBus = assignment.get("bus") || assignedBus;
+        assignedToken = assignment.get("token") || assignedToken;
         history.replaceState(null, "", location.pathname);
+        return true;
       }
+
+      readAssignment();
 
       function setStatus(kind, title, message) {
         elements.status.className = `status ${kind || ""}`.trim();
@@ -363,6 +370,20 @@
       elements.stop.addEventListener("click", stopSharing);
       document.addEventListener("visibilitychange", () => {
         if (watchId !== null && document.visibilityState === "visible") requestWakeLock();
+      });
+      // Tapping a fresh assignment link while this page is already open only
+      // changes the fragment, so re-apply it instead of silently ignoring it.
+      window.addEventListener("hashchange", () => {
+        if (!readAssignment()) return;
+        if (watchId !== null) {
+          setStatus(
+            "live",
+            "Already sharing",
+            "Stop sharing before switching this phone to another vehicle.",
+          );
+          return;
+        }
+        applyAssignment();
       });
       window.addEventListener("beforeunload", stopSharing);
       loadVehicles();

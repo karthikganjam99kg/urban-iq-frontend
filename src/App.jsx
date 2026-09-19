@@ -36,6 +36,8 @@ const [simulatedVehicles, setSimulatedVehicles] = useState(50);
 const [simulationResult, setSimulationResult] = useState(null);
 const [trafficHistory, setTrafficHistory] = useState([]);
 const [liveDetections, setLiveDetections] = useState([]);
+const [neuralStatus, setNeuralStatus] = useState("checking");
+const [neuralModels, setNeuralModels] = useState({});
 useEffect(() => {
     const getTrafficData = async () => {
       try {
@@ -68,9 +70,35 @@ useEffect(() => {
 
 getAlerts();
 
-    const interval = setInterval(getTrafficData, 5000);
+    const pingNeuralApi = async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const response = await fetch(apiUrl("/api/health"), {
+          signal: controller.signal,
+        });
+        const data = await response.json();
+        if (response.ok && data?.status === "ok") {
+          setNeuralStatus("live");
+          setNeuralModels(data.models ?? {});
+        } else {
+          setNeuralStatus("offline");
+        }
+      } catch {
+        setNeuralStatus("offline");
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
-    return () => clearInterval(interval);
+    pingNeuralApi();
+    const interval = setInterval(getTrafficData, 5000);
+    const neuralInterval = setInterval(pingNeuralApi, 15000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(neuralInterval);
+    };
   }, []);
 
   // Supabase keeps the history and detection feed alive across devices.
@@ -110,6 +138,15 @@ getAlerts();
     };
   }, []);
   const trafficIsLive = trafficStatus === "live" && trafficData !== null;
+  const potholeApiLive = neuralStatus === "live" && neuralModels.pothole !== false;
+  const potholeChip =
+    neuralStatus === "checking"
+      ? "YOLO · CONNECTING"
+      : potholeApiLive
+        ? "YOLO · LIVE"
+        : neuralStatus === "live"
+          ? "YOLO · MODEL MISSING"
+          : "YOLO · OFFLINE";
 
   const averageConfidence = (items = []) => {
     const scores = items
@@ -778,7 +815,9 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
         <h2 className="page-title">Pothole Intelligence</h2>
         <p>Detect and classify road damage from any camera image in seconds.</p>
       </div>
-      <span className="model-chip">YOLO · ACTIVE</span>
+      <span className={`model-chip ${neuralStatus === "live" && potholeApiLive ? "is-live" : neuralStatus === "checking" ? "is-checking" : "is-offline"}`}>
+        {potholeChip}
+      </span>
     </div>
 
     <section className="section-card detector-shell">
@@ -790,11 +829,21 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
         </div>
       </div>
 
-      <label className={`upload-zone ${isDetecting ? "is-loading" : ""}`}>
+      {!potholeApiLive && neuralStatus !== "checking" && (
+        <div className="inline-error">
+          <span>!</span>
+          <div>
+            <strong>Vision API not connected</strong>
+            <p>The Hugging Face service is unreachable. Pothole detection stays offline until the API health check succeeds.</p>
+          </div>
+        </div>
+      )}
+
+      <label className={`upload-zone ${isDetecting ? "is-loading" : ""} ${!potholeApiLive ? "is-disabled" : ""}`}>
         <input
           type="file"
           accept="image/*"
-          disabled={isDetecting}
+          disabled={isDetecting || !potholeApiLive}
           onChange={async (event) => {
           const file = event.target.files?.[0];
 
@@ -845,10 +894,10 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
           } catch (error) {
             console.error("Pothole detection error:", error);
-
+            setNeuralStatus("offline");
             setDetections([]);
             setDetectionError(
-              "The AI service could not process this image. Please verify the backend connection and try again."
+              "The AI service could not process this image. Hugging Face looks unreachable — try again when YOLO shows LIVE."
             );
           } finally {
             setIsDetecting(false);

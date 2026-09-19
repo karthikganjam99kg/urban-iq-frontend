@@ -1329,6 +1329,23 @@ nav {
   letter-spacing: 0.09em;
 }
 
+.model-chip.is-checking {
+  color: #8a6a12;
+  background: #fff8e8;
+  border-color: #ead9a8;
+}
+
+.model-chip.is-offline {
+  color: #8f2d2d;
+  background: #fdf2f2;
+  border-color: #f0c9c9;
+}
+
+.upload-zone.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .stats-grid {
   gap: 14px;
 }

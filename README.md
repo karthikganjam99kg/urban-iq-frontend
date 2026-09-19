@@ -87,11 +87,8 @@ npm run dev
 | `VITE_API_BASE_URL` | Vercel / `.env.local` | Neural API base URL, no trailing slash |
 | `VITE_SUPABASE_URL` | Vercel / `.env.local` | Supabase project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Vercel / `.env.local` | Browser-safe key, guarded by RLS |
-| `TOMTOM_API_KEY` | **Backend only** | Billable traffic key — never expose in frontend |
 
-Supabase is optional: without those two variables the app runs fine and simply hides the
-history panel. With them, run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor to
-create `traffic_snapshots` and `detections` with RLS and Realtime enabled.
+TomTom and the Supabase **secret** key belong only in [urban-iq-backend](https://github.com/karthikganjam99kg/urban-iq-backend). Schema SQL is there too: `supabase/schema.sql`.
 
 ## 🌐 Deploy
 

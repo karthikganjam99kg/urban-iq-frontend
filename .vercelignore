@@ -1,0 +1,17 @@
+node_modules/
+dist/
+runs/
+api/
+weights/
+rtdetr_dataset/
+requirements.txt
+Procfile
+yolo11n.pt
+*.pt
+src/backend/
+src/garbage_ai/
+src/pothole_ai/
+src/pothole_ai/*.jpg
+src/pothole_ai/*.jpeg
+src/pothole_ai/*.png
+src/pothole_ai/*.webp

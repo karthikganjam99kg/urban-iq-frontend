@@ -182,6 +182,16 @@
       let sending = false;
       let wakeLock = null;
 
+      // Assignment links carry the bus and token in the fragment, which browsers
+      // never send to the server. The fragment is cleared immediately so the
+      // token is not left sitting in the address bar.
+      const assignment = new URLSearchParams(location.hash.slice(1));
+      const assignedBus = assignment.get("bus") || "";
+      const assignedToken = assignment.get("token") || "";
+      if (location.hash) {
+        history.replaceState(null, "", location.pathname);
+      }
+
       function setStatus(kind, title, message) {
         elements.status.className = `status ${kind || ""}`.trim();
         elements.statusTitle.textContent = title;
@@ -199,10 +209,33 @@
           for (const bus of buses) {
             elements.busId.add(new Option(`${bus.id} · ${bus.route_name}`, bus.id));
           }
+          applyAssignment();
         } catch (error) {
-          elements.busId.innerHTML = '<option value="">Fleet catalog unavailable</option>';
+          elements.busId.replaceChildren(new Option("Fleet catalog unavailable", ""));
           setStatus("error", "Could not load vehicles", error.message);
         }
+      }
+
+      function applyAssignment() {
+        if (assignedToken) elements.token.value = assignedToken;
+        if (!assignedBus) return;
+
+        elements.busId.value = assignedBus;
+        if (elements.busId.value !== assignedBus) {
+          setStatus(
+            "error",
+            "Unknown vehicle in link",
+            `${assignedBus} is not a configured vehicle. Pick one from the list.`,
+          );
+          return;
+        }
+        setStatus(
+          "",
+          `Assigned to ${assignedBus}`,
+          assignedToken
+            ? "Tap Start live sharing once this phone is on the bus."
+            : "Paste the fleet ingest token, then tap Start live sharing.",
+        );
       }
 
       async function requestWakeLock() {

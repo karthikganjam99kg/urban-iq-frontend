@@ -96,6 +96,30 @@ This is an operator tool, so it is deliberately unlisted: it is not linked from 
 navigation, it ships as a standalone file outside the React bundle, and it is excluded from
 search engines via `robots.txt` and a `noindex` tag. Share the URL directly with drivers.
 
+#### One-tap assignment links
+
+So drivers never type anything, send each one a prefilled link:
+
+```
+https://hyderabad-urban-intelligence.vercel.app/fleet-device.html#bus=HYD-BUS-001&token=YOUR_TOKEN
+```
+
+The vehicle and token travel in the URL **fragment**, which browsers never send to the server,
+so the token stays out of server and CDN logs. The page fills both fields, then immediately
+clears the fragment from the address bar. The driver only taps **Start live sharing**.
+
+Generate a link for every configured vehicle:
+
+```bash
+TOKEN=your_token
+curl -s https://priyaredddy-cse-hyderabad-urban-intelligence-api.hf.space/api/fleet \
+  | python3 -c 'import json,sys,os
+for bus in json.load(sys.stdin)["buses"]:
+    print(bus["id"], "https://hyderabad-urban-intelligence.vercel.app/fleet-device.html#bus=%s&token=%s" % (bus["id"], os.environ["TOKEN"]))'
+```
+
+Treat these links like passwords: anyone holding one can post telemetry.
+
 ## 🌐 Deploy
 
 Every push to `main` ships to production via Vercel's Git integration.

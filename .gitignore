@@ -1,0 +1,35 @@
+node_modules/
+dist/
+.vercel
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Backend lives in urban-iq-backend. These paths may exist locally for
+# running the API alongside the UI, but they are not part of this repo.
+.venv/
+__pycache__/
+*.pyc
+src/__init__.py
+src/backend/
+src/garbage_ai/
+src/pothole_ai/
+src/waterlogging_ai/
+weights/
+runs/
+rtdetr_dataset/
+*.pt
+requirements.txt
+Procfile
+Dockerfile
+.dockerignore
+render.yaml
+api/
+
+# Detection artifacts
+*.jpg
+*.jpeg
+*.png
+*.webp

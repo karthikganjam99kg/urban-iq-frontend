@@ -1346,6 +1346,13 @@ nav {
   pointer-events: none;
 }
 
+.prediction-disclaimer {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .stats-grid {
   gap: 14px;
 }

@@ -31,6 +31,7 @@ is already moving.
 | --- | --- | --- |
 | 📊 **Dashboard** | City-wide vitals, congestion pulse, incident rollup | TomTom + YOLO |
 | 🚌 **Live Fleet** | Bus roster, route status, live map | Fleet telemetry + Leaflet |
+| 🤖 **AI Prediction** | Gated one-hour crowd-demand proxy | Supabase `vehicle_density` + rolling model |
 | 🕳️ **Pothole Detection** | Upload or capture a frame, get boxed potholes + confidence | YOLO `pothole2v.pt` |
 | 🗑️ **Garbage Detection** | Flags waste hotspots and raises alerts | YOLO `best.pt` |
 | 🚗 **Vehicle + Plate AI** | Counts vehicles, reads plates, scores rash motion | YOLO `yolo11n.pt` + EasyOCR |

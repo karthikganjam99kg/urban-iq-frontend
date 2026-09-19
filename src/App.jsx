@@ -38,6 +38,8 @@ const [trafficHistory, setTrafficHistory] = useState([]);
 const [liveDetections, setLiveDetections] = useState([]);
 const [neuralStatus, setNeuralStatus] = useState("checking");
 const [neuralModels, setNeuralModels] = useState({});
+const [demandForecast, setDemandForecast] = useState(null);
+const [demandStatus, setDemandStatus] = useState("loading");
 useEffect(() => {
     const getTrafficData = async () => {
       try {
@@ -91,13 +93,31 @@ getAlerts();
       }
     };
 
+    const getDemandForecast = async () => {
+      try {
+        const response = await fetch(apiUrl("/api/demand-forecast"));
+        const data = await response.json();
+        if (!response.ok || data?.status === "offline") {
+          setDemandStatus("offline");
+          return;
+        }
+        setDemandForecast(data);
+        setDemandStatus(data.status === "live" ? "live" : "collecting");
+      } catch {
+        setDemandStatus("offline");
+      }
+    };
+
     pingNeuralApi();
+    getDemandForecast();
     const interval = setInterval(getTrafficData, 5000);
     const neuralInterval = setInterval(pingNeuralApi, 15000);
+    const demandInterval = setInterval(getDemandForecast, 60000);
 
     return () => {
       clearInterval(interval);
       clearInterval(neuralInterval);
+      clearInterval(demandInterval);
     };
   }, []);
 
@@ -1174,120 +1194,100 @@ alert(
 
         {activePage === "AI Prediction" && (
           <>
-            <h2 className="page-title">
-              AI Prediction
-            </h2>
+            <div className="page-heading">
+              <div>
+                <span className="eyebrow">DATA MODEL · FLEET PLANNING</span>
+                <h2 className="page-title">AI Demand Prediction</h2>
+                <p>One-hour demand proxy trained from Supabase YOLO person-count history.</p>
+              </div>
+              <span className={`model-chip ${
+                demandStatus === "live"
+                  ? "is-live"
+                  : demandStatus === "loading"
+                    ? "is-checking"
+                    : "is-offline"
+              }`}>
+                {demandStatus === "live"
+                  ? "MODEL · LIVE"
+                  : demandStatus === "collecting"
+                    ? "MODEL · COLLECTING"
+                    : demandStatus === "offline"
+                      ? "MODEL · OFFLINE"
+                      : "MODEL · CONNECTING"}
+              </span>
+            </div>
 
             <section className="section-card">
+              {demandStatus === "live" && demandForecast ? (
+                <>
+                  <div className="prediction-box">
+                    <span>Predicted people signal for the next hour</span>
+                    <h1>{demandForecast.predicted_people} people</h1>
+                    <p>Demand Level</p>
+                    <strong className={demandForecast.demand_level === "HIGH" ? "demand-high" : ""}>
+                      {demandForecast.demand_level}
+                    </strong>
+                    <div className="demand-bar">
+                      <div
+                        className="demand-progress"
+                        style={{ width: `${demandForecast.demand_score}%` }}
+                      ></div>
+                    </div>
+                    <p>
+                      Model confidence: <b>{demandForecast.confidence}%</b>
+                    </p>
+                    <small>{demandForecast.model} · YOLO person-count proxy</small>
+                  </div>
 
-              <h2>
-                🤖 AI Demand Prediction
-              </h2>
-
-              <p>
-                AI-based passenger demand analysis
-              </p>
-
-              <div className="prediction-box">
-
-                <span>
-                  Predicted passenger demand
-                  for next hour
-                </span>
-
-                <h1>
-                  91 passengers
-                </h1>
-
-                <p>
-                  Demand Level
-                </p>
-
-                <strong className="demand-high">
-                  HIGH
-                </strong>
-
-                <div className="demand-bar">
-                  <div
-                    className="demand-progress"
-                    style={{ width: "91%" }}
-                  ></div>
+                  <div className="recommendation">
+                    <h3>Fleet recommendation</h3>
+                    <strong>{demandForecast.recommendation}</strong>
+                  </div>
+                </>
+              ) : (
+                <div className="inline-error">
+                  <span>!</span>
+                  <div>
+                    <strong>
+                      {demandStatus === "offline"
+                        ? "Demand service is not connected"
+                        : "Collecting enough history for a trustworthy forecast"}
+                    </strong>
+                    <p>
+                      {demandStatus === "offline"
+                        ? "The Hugging Face API did not return demand data."
+                        : demandForecast?.message ?? "Waiting for the demand API…"}
+                    </p>
+                    {demandForecast?.data_quality && (
+                      <small>
+                        {demandForecast.data_quality.raw_frames} frames ·{" "}
+                        {demandForecast.data_quality.minute_buckets} minute buckets ·{" "}
+                        {demandForecast.data_quality.buses_observed} bus
+                        {demandForecast.data_quality.buses_observed === 1 ? "" : "es"}
+                      </small>
+                    )}
+                  </div>
                 </div>
+              )}
 
-                <p>
-                  Demand confidence: <b>91%</b>
-                </p>
-
+              <h2 style={{ marginTop: "30px" }}>Route-wise model status</h2>
+              <div className="route-demand">
+                {(demandForecast?.routes ?? []).map((route) => (
+                  <div className="demand-route" key={`${route.bus_id}-${route.route_id}`}>
+                    <span>{route.route_id} · {route.bus_id}</span>
+                    <strong>
+                      {route.status === "live"
+                        ? `${route.demand_score}%`
+                        : `${route.observations} samples`}
+                    </strong>
+                  </div>
+                ))}
               </div>
 
-              {/* AI RECOMMENDATION */}
-
-              <div className="recommendation">
-
-                💡
-
-                <h3>
-                  AI Recommendation
-                </h3>
-
-                <p>
-                  Passenger demand is expected
-                  to remain high during the next hour.
-                </p>
-
-                <strong>
-                  ⚠️ Increase fleet capacity on
-                  high-demand routes.
-                </strong>
-
-              </div>
-
-              {/* ROUTE DEMAND */}
-
-              <h2 style={{ marginTop: "30px" }}>
-                📊 Route-wise Demand
-              </h2>
-<div className="route-demand">
-
-  <div className="demand-route">
-    <span>Dilsukhnagar → Mehdipatnam</span>
-    <strong>72%</strong>
-  </div>
-
-  <div className="demand-route">
-    <span>Mehdipatnam → Dilsukhnagar</span>
-    <strong>84%</strong>
-  </div>
-
-  <div className="demand-route">
-    <span>LB Nagar → Secunderabad</span>
-    <strong>90%</strong>
-  </div>
-
-  <div className="demand-route">
-    <span>Kukatpally → Ameerpet</span>
-    <strong>76%</strong>
-  </div>
-
-  <div className="demand-route">
-    <span>Gachibowli → Secunderabad</span>
-    <strong>88%</strong>
-  </div>
-
-</div>
-              
-              <div className="peak-warning">
-
-                🔴 <b>Peak Demand Warning</b>
-
-                <p>
-                  High passenger demand detected.
-                  Additional buses are recommended
-                  for selected routes.
-                </p>
-
-              </div>
-
+              <p className="prediction-disclaimer">
+                This is a demand proxy from camera person counts, not ticketing or boarding data.
+                The model refuses to forecast stale or too-short datasets.
+              </p>
             </section>
 
           </>

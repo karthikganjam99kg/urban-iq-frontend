@@ -92,6 +92,10 @@ real GPS position to `/api/fleet/telemetry` about once per minute while it remai
 The token is held only in the open page and is not compiled into the frontend or saved to
 local storage.
 
+This is an operator tool, so it is deliberately unlisted: it is not linked from the dashboard
+navigation, it ships as a standalone file outside the React bundle, and it is excluded from
+search engines via `robots.txt` and a `noindex` tag. Share the URL directly with drivers.
+
 ## 🌐 Deploy
 
 Every push to `main` ships to production via Vercel's Git integration.

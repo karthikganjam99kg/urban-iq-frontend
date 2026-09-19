@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+# Operator-only GPS tool, kept out of search results.
+Disallow: /fleet-device.html

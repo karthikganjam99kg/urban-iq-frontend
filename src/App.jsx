@@ -19,6 +19,22 @@ import {
 } from "./lib/api";
 import "./App.css";
 
+function describeBaseline(result) {
+  const baseline = result.baseline;
+  if (!baseline) {
+    return result.baseline_vehicle_count == null
+      ? "no observed baseline"
+      : `observed baseline ${result.baseline_vehicle_count}`;
+  }
+  if (baseline.status === "live") {
+    return `observed baseline ${baseline.vehicle_count} from ${baseline.sample_size} recent frame(s)`;
+  }
+  if (baseline.status === "stale") {
+    return `last observed baseline ${baseline.vehicle_count}, ${baseline.age_minutes} min old`;
+  }
+  return "no camera observations recorded yet";
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
   const [detections, setDetections] = useState([]);
@@ -1375,8 +1391,8 @@ alert(
             </p>
 
             <small>
-              🚗 Scenario: {simulationResult.vehicles} vehicles · observed baseline{" "}
-              {simulationResult.baseline_vehicle_count}
+              🚗 Scenario: {simulationResult.vehicles} vehicles ·{" "}
+              {describeBaseline(simulationResult)}
             </small>
           </div>
         </div>

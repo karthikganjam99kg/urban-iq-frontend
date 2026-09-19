@@ -47,9 +47,39 @@
       }
       input:focus, select:focus { outline: 2px solid #0ea5e9; border-color: transparent; }
       .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-      button { cursor: pointer; border: 0; font-weight: 800; background: #0284c7; }
-      button.secondary { background: #23384d; }
-      button:disabled { cursor: not-allowed; opacity: .45; }
+      button {
+        cursor: pointer;
+        border: 0;
+        font-weight: 800;
+        background: linear-gradient(135deg, #1769e0, #1b92ee);
+        box-shadow: 0 10px 24px rgba(23, 105, 224, .24);
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      button.secondary {
+        color: #bfd0e2;
+        background: linear-gradient(135deg, #1a3149, #213e5a);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, .16);
+      }
+      button:hover:not(:disabled) {
+        filter: brightness(1.08) saturate(1.08);
+        box-shadow: 0 13px 28px rgba(23, 105, 224, .3);
+        transform: translateY(-1px);
+      }
+      button:active:not(:disabled) {
+        box-shadow: 0 4px 12px rgba(23, 105, 224, .2);
+        transform: translateY(1px);
+      }
+      button:focus-visible {
+        outline: 3px solid rgba(56, 189, 248, .38);
+        outline-offset: 3px;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        color: #71869a;
+        background: #14283c;
+        box-shadow: none;
+      }
       .status {
         display: flex;
         gap: 12px;

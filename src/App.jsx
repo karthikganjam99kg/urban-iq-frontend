@@ -527,7 +527,11 @@ getAlerts();
       <div className="stat-card">
         <span>🔴</span>
         <p>High Demand</p>
-        <h2>{highDemandBuses.length}</h2>
+        <h2>
+          {demandStatus === "live"
+            ? demandForecast.routes.filter((route) => route.demand_level === "HIGH").length
+            : "—"}
+        </h2>
       </div>
 
     </div>
@@ -722,35 +726,32 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
       </h2>
 
       <p>
-        Passenger demand forecast
+        Supabase YOLO crowd-demand model
       </p>
 
-      <div className="prediction-box">
-
-        <span>
-          Next Hour Predicted Demand
-        </span>
-
-        <h1>
-          91 passengers
-        </h1>
-
-        <strong>
-          HIGH
-        </strong>
-
-        <div className="recommendation">
-
-          💡 <b>AI Recommendation</b>
-
-          <br />
-
-          Consider adding an extra bus
-          during peak hours.
-
+      {demandStatus === "live" && demandForecast ? (
+        <div className="prediction-box">
+          <span>Next-hour people signal</span>
+          <h1>{demandForecast.predicted_people} people</h1>
+          <strong>{demandForecast.demand_level}</strong>
+          <div className="recommendation">
+            <b>Model recommendation</b>
+            <br />
+            {demandForecast.recommendation}
+          </div>
         </div>
-
-      </div>
+      ) : (
+        <div className="prediction-box">
+          <span>Demand model status</span>
+          <h1>{demandStatus === "offline" ? "Offline" : "Collecting data"}</h1>
+          <strong>
+            {demandForecast?.data_quality
+              ? `${demandForecast.data_quality.minute_buckets} minute bucket`
+              : "Waiting for API"}
+          </strong>
+          <p>No forecast is shown until the model has enough recent history.</p>
+        </div>
+      )}
 
     </section>
 

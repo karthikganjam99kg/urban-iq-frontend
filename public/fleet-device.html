@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <title>UrbanIQ Fleet Device</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: #07111f;
+        color: #e5f2ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top right, rgba(14, 165, 233, .18), transparent 38%),
+          linear-gradient(160deg, #07111f, #0b1b2f);
+      }
+      main { width: min(680px, 100%); margin: 0 auto; padding: 28px 18px 48px; }
+      a { color: #7dd3fc; text-decoration: none; }
+      .eyebrow { color: #38bdf8; font-size: 12px; font-weight: 800; letter-spacing: .14em; }
+      h1 { margin: 8px 0; font-size: clamp(30px, 8vw, 48px); }
+      .lede { color: #9fb3c8; line-height: 1.6; margin-bottom: 24px; }
+      .card {
+        background: rgba(10, 25, 43, .88);
+        border: 1px solid rgba(125, 211, 252, .16);
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+        padding: 22px;
+      }
+      label { display: block; margin-bottom: 16px; color: #bad0e4; font-size: 14px; }
+      input, select, button {
+        width: 100%;
+        margin-top: 7px;
+        border: 1px solid #29435d;
+        border-radius: 11px;
+        background: #0c1e32;
+        color: #f0f9ff;
+        padding: 13px 14px;
+        font: inherit;
+      }
+      input:focus, select:focus { outline: 2px solid #0ea5e9; border-color: transparent; }
+      .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+      button { cursor: pointer; border: 0; font-weight: 800; background: #0284c7; }
+      button.secondary { background: #23384d; }
+      button:disabled { cursor: not-allowed; opacity: .45; }
+      .status {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin: 20px 0 0;
+        border-radius: 12px;
+        background: #0c1e32;
+        padding: 14px;
+      }
+      .dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: #64748b; }
+      .status.live .dot { background: #22c55e; box-shadow: 0 0 16px #22c55e; }
+      .status.error .dot { background: #ef4444; }
+      .status.sending .dot { background: #f59e0b; }
+      .status strong, .status small { display: block; }
+      .status small { color: #8fa6bc; margin-top: 3px; line-height: 1.4; }
+      .reading {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .reading div { background: #0c1e32; border-radius: 12px; padding: 12px; }
+      .reading small { color: #8fa6bc; display: block; }
+      .reading strong { display: block; margin-top: 4px; font-size: 17px; overflow-wrap: anywhere; }
+      .privacy { margin: 18px 2px 0; color: #839ab1; font-size: 12px; line-height: 1.6; }
+      footer { margin-top: 24px; text-align: center; color: #7890a8; font-size: 13px; }
+      @media (max-width: 480px) {
+        .buttons, .reading { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="eyebrow">URBANIQ · FLEET DEVICE</span>
+      <h1>Live GPS sender</h1>
+      <p class="lede">
+        Assign this phone to one configured vehicle. While sharing is active,
+        its real GPS position is sent to UrbanIQ about once per minute.
+      </p>
+
+      <section class="card">
+        <label>
+          Vehicle
+          <select id="busId" required>
+            <option value="">Loading configured vehicles…</option>
+          </select>
+        </label>
+
+        <label>
+          Fleet ingest token
+          <input
+            id="token"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Paste FLEET_INGEST_TOKEN"
+            required
+          />
+        </label>
+
+        <label>
+          Operational status (optional)
+          <select id="operationalStatus">
+            <option value="">Not reported</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DELAYED">Delayed</option>
+            <option value="OUT_OF_SERVICE">Out of service</option>
+          </select>
+        </label>
+
+        <div class="buttons">
+          <button id="startButton" type="button">Start live sharing</button>
+          <button id="stopButton" class="secondary" type="button" disabled>
+            Stop sharing
+          </button>
+        </div>
+
+        <div id="status" class="status">
+          <span class="dot" aria-hidden="true"></span>
+          <div>
+            <strong id="statusTitle">Not sharing</strong>
+            <small id="statusMessage">Choose a vehicle and start when the phone is on the bus.</small>
+          </div>
+        </div>
+
+        <div class="reading" aria-live="polite">
+          <div><small>Latitude</small><strong id="latitude">—</strong></div>
+          <div><small>Longitude</small><strong id="longitude">—</strong></div>
+          <div><small>Speed</small><strong id="speed">—</strong></div>
+          <div><small>Last accepted</small><strong id="lastSent">—</strong></div>
+        </div>
+
+        <p class="privacy">
+          The token stays only in this open page and is never saved to local
+          storage. Closing the tab stops location sharing. Keep this page open;
+          mobile operating systems may pause browser activity when it is
+          backgrounded or the screen is locked.
+        </p>
+      </section>
+
+      <footer><a href="/">← Return to the UrbanIQ dashboard</a></footer>
+    </main>
+
+    <script>
+      const API_BASE =
+        location.hostname === "localhost" || location.hostname === "127.0.0.1"
+          ? ""
+          : "https://priyaredddy-cse-hyderabad-urban-intelligence-api.hf.space";
+      const SEND_INTERVAL_MS = 60_000;
+
+      const elements = {
+        busId: document.querySelector("#busId"),
+        token: document.querySelector("#token"),
+        operationalStatus: document.querySelector("#operationalStatus"),
+        start: document.querySelector("#startButton"),
+        stop: document.querySelector("#stopButton"),
+        status: document.querySelector("#status"),
+        statusTitle: document.querySelector("#statusTitle"),
+        statusMessage: document.querySelector("#statusMessage"),
+        latitude: document.querySelector("#latitude"),
+        longitude: document.querySelector("#longitude"),
+        speed: document.querySelector("#speed"),
+        lastSent: document.querySelector("#lastSent"),
+      };
+
+      let watchId = null;
+      let timerId = null;
+      let latestPosition = null;
+      let lastSentAt = 0;
+      let sending = false;
+      let wakeLock = null;
+
+      function setStatus(kind, title, message) {
+        elements.status.className = `status ${kind || ""}`.trim();
+        elements.statusTitle.textContent = title;
+        elements.statusMessage.textContent = message;
+      }
+
+      async function loadVehicles() {
+        try {
+          const response = await fetch(`${API_BASE}/api/fleet`);
+          if (!response.ok) throw new Error(`Fleet API returned ${response.status}`);
+          const data = await response.json();
+          const buses = [...(data.buses || [])].sort((a, b) => a.id.localeCompare(b.id));
+          elements.busId.replaceChildren();
+          elements.busId.add(new Option("Select a configured vehicle", ""));
+          for (const bus of buses) {
+            elements.busId.add(new Option(`${bus.id} · ${bus.route_name}`, bus.id));
+          }
+        } catch (error) {
+          elements.busId.innerHTML = '<option value="">Fleet catalog unavailable</option>';
+          setStatus("error", "Could not load vehicles", error.message);
+        }
+      }
+
+      async function requestWakeLock() {
+        if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+        try {
+          wakeLock = await navigator.wakeLock.request("screen");
+        } catch {
+          // GPS still works while the browser allows it; the warning below remains accurate.
+        }
+      }
+
+      async function sendPosition(position) {
+        if (sending) return;
+        sending = true;
+        setStatus("sending", "Sending GPS update", "Waiting for the backend to accept this reading…");
+
+        const reading = {
+          bus_id: elements.busId.value,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        if (Number.isFinite(position.coords.speed)) {
+          reading.speed = Math.max(0, position.coords.speed * 3.6);
+        }
+        if (Number.isFinite(position.coords.heading)) {
+          reading.heading = position.coords.heading;
+        }
+        if (elements.operationalStatus.value) {
+          reading.status = elements.operationalStatus.value;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/api/fleet/telemetry`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Ingest-Token": elements.token.value,
+            },
+            body: JSON.stringify(reading),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || `API returned ${response.status}`);
+          lastSentAt = Date.now();
+          elements.lastSent.textContent = new Date(data.recorded_at).toLocaleTimeString();
+          setStatus(
+            "live",
+            "Live telemetry accepted",
+            "This phone will send another heartbeat in about one minute.",
+          );
+        } catch (error) {
+          setStatus("error", "Update rejected", error.message);
+        } finally {
+          sending = false;
+        }
+      }
+
+      function receivePosition(position) {
+        latestPosition = position;
+        elements.latitude.textContent = position.coords.latitude.toFixed(6);
+        elements.longitude.textContent = position.coords.longitude.toFixed(6);
+        elements.speed.textContent = Number.isFinite(position.coords.speed)
+          ? `${(Math.max(0, position.coords.speed) * 3.6).toFixed(1)} km/h`
+          : "Not reported";
+        if (Date.now() - lastSentAt >= SEND_INTERVAL_MS) sendPosition(position);
+      }
+
+      function locationError(error) {
+        const messages = {
+          1: "Location permission was denied. Allow precise location for this page.",
+          2: "The phone could not determine its location.",
+          3: "Location acquisition timed out. Keep the phone near a window and retry.",
+        };
+        setStatus("error", "GPS unavailable", messages[error.code] || error.message);
+      }
+
+      async function startSharing() {
+        if (!elements.busId.value) {
+          setStatus("error", "Select a vehicle", "A configured bus ID is required.");
+          return;
+        }
+        if (!elements.token.value.trim()) {
+          setStatus("error", "Token required", "Paste the fleet ingest token.");
+          return;
+        }
+        if (!navigator.geolocation) {
+          setStatus("error", "GPS unsupported", "This browser does not provide geolocation.");
+          return;
+        }
+
+        elements.start.disabled = true;
+        elements.stop.disabled = false;
+        elements.busId.disabled = true;
+        elements.token.disabled = true;
+        setStatus("sending", "Acquiring GPS", "Approve precise location when your phone asks.");
+        await requestWakeLock();
+
+        watchId = navigator.geolocation.watchPosition(receivePosition, locationError, {
+          enableHighAccuracy: true,
+          maximumAge: 10_000,
+          timeout: 20_000,
+        });
+        timerId = window.setInterval(() => {
+          if (latestPosition && Date.now() - lastSentAt >= SEND_INTERVAL_MS) {
+            sendPosition(latestPosition);
+          }
+        }, 5_000);
+      }
+
+      function stopSharing() {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (timerId !== null) window.clearInterval(timerId);
+        if (wakeLock) wakeLock.release().catch(() => {});
+        watchId = null;
+        timerId = null;
+        latestPosition = null;
+        wakeLock = null;
+        elements.start.disabled = false;
+        elements.stop.disabled = true;
+        elements.busId.disabled = false;
+        elements.token.disabled = false;
+        setStatus("", "Not sharing", "Location updates have stopped.");
+      }
+
+      elements.start.addEventListener("click", startSharing);
+      elements.stop.addEventListener("click", stopSharing);
+      document.addEventListener("visibilitychange", () => {
+        if (watchId !== null && document.visibilityState === "visible") requestWakeLock();
+      });
+      window.addEventListener("beforeunload", stopSharing);
+      loadVehicles();
+    </script>
+  </body>
+</html>

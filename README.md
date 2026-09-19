@@ -84,6 +84,14 @@ This repo is UI-only. Clone [urban-iq-backend](https://github.com/karthikganjam9
 
 TomTom and the Supabase **secret** key belong only in [urban-iq-backend](https://github.com/karthikganjam99kg/urban-iq-backend). Schema SQL is there too: `supabase/schema.sql`.
 
+### Use a phone as a fleet GPS device
+
+Open `/fleet-device.html` on the deployed HTTPS site, choose the configured bus, paste the
+`FLEET_INGEST_TOKEN`, and tap **Start live sharing**. The standalone page sends the phone's
+real GPS position to `/api/fleet/telemetry` about once per minute while it remains open.
+The token is held only in the open page and is not compiled into the frontend or saved to
+local storage.
+
 ## 🌐 Deploy
 
 Every push to `main` ships to production via Vercel's Git integration.

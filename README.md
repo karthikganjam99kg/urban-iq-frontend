@@ -29,14 +29,15 @@ is already moving.
 
 | Module | What it does | Signal source |
 | --- | --- | --- |
-| 📊 **Dashboard** | City-wide vitals, congestion pulse, incident rollup | TomTom + YOLO |
-| 🚌 **Live Fleet** | Bus roster, route status, live map | Fleet telemetry + Leaflet |
+| 📊 **Dashboard** | City-wide vitals, congestion pulse, incident rollup | `/api/overview` + TomTom |
+| 🚌 **Live Fleet** | Bus roster, route status, live map, freshness | Supabase fleet catalog + telemetry |
 | 🤖 **AI Prediction** | Gated one-hour crowd-demand proxy | Supabase `vehicle_density` + rolling model |
 | 🕳️ **Pothole Detection** | Upload or capture a frame, get boxed potholes + confidence | YOLO `pothole2v.pt` |
 | 🗑️ **Garbage Detection** | Flags waste hotspots and raises alerts | YOLO `best.pt` |
 | 🚗 **Vehicle + Plate AI** | Counts vehicles, reads plates, scores rash motion | YOLO `yolo11n.pt` + EasyOCR |
-| 🏃 **Fitness & Sports** | Walk / jog / cycle safety verdicts from live congestion, plus a realtime detection feed | TomTom + Supabase Realtime |
-| 🚦 **Traffic Simulator** | Stress-test congestion scenarios before they happen | Congestion model |
+| 🗺️ **Routes** | Catalog and gated best-route recommendation | Supabase route conditions |
+| 🏃 **Fitness & Sports** | Verified routes/facilities with a live safety overlay | Supabase catalog + TomTom |
+| 🚦 **Traffic Simulator** | Stress-test congestion scenarios from a recent baseline | TomTom + vehicle density |
 | 🔔 **Alerts** | Chronological civic incident stream | Supabase `alerts` via the API |
 
 ## 🏗️ Architecture

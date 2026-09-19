@@ -6,15 +6,18 @@ import {
   fetchRecentDetections,
   subscribeToDetections,
 } from "./lib/supabase";
+import {
+  apiUrl,
+  getAlerts as fetchAlertsData,
+  getDemandForecast as fetchDemandForecast,
+  getFitness as fetchFitnessData,
+  getFleet as fetchFleetData,
+  getOverview as fetchOverviewData,
+  getRoutes as fetchRoutesData,
+  getTrafficHistory,
+  simulateTraffic,
+} from "./lib/api";
 import "./App.css";
-
-const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV
-    ? ""
-    : "https://priyaredddy-cse-hyderabad-urban-intelligence-api.hf.space")
-).replace(/\/$/, "");
-const apiUrl = (path) => `${API_BASE_URL}${path}`;
 
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
@@ -22,7 +25,7 @@ function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionError, setDetectionError] = useState("");
-  const [garbageAlerts, setGarbageAlerts] = useState([]);
+  const [roadRisk, setRoadRisk] = useState(null);
 const [cameraStream, setCameraStream] = useState(null);
 const [imageDimensions, setImageDimensions] = useState({
   width: 1,
@@ -40,6 +43,13 @@ const [neuralStatus, setNeuralStatus] = useState("checking");
 const [neuralModels, setNeuralModels] = useState({});
 const [demandForecast, setDemandForecast] = useState(null);
 const [demandStatus, setDemandStatus] = useState("loading");
+const [fleetBuses, setFleetBuses] = useState([]);
+const [fleetStatus, setFleetStatus] = useState("loading");
+const [fleetSummary, setFleetSummary] = useState(null);
+const [overview, setOverview] = useState(null);
+const [routeData, setRouteData] = useState(null);
+const [fitnessData, setFitnessData] = useState(null);
+const [simulationStatus, setSimulationStatus] = useState("idle");
 useEffect(() => {
     const getTrafficData = async () => {
       try {
@@ -61,16 +71,13 @@ useEffect(() => {
 
     getTrafficData();
     const getAlerts = async () => {
-  try {
-    const response = await fetch(apiUrl("/api/alerts"));
-    const data = await response.json();
-    setAlerts(data);
-  } catch (error) {
-    console.error("Alerts API error:", error);
-  }
-};
-
-getAlerts();
+      try {
+        const data = await fetchAlertsData();
+        setAlerts(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Alerts API error:", error);
+      }
+    };
 
     const pingNeuralApi = async () => {
       const controller = new AbortController();
@@ -95,9 +102,8 @@ getAlerts();
 
     const getDemandForecast = async () => {
       try {
-        const response = await fetch(apiUrl("/api/demand-forecast"));
-        const data = await response.json();
-        if (!response.ok || data?.status === "offline") {
+        const data = await fetchDemandForecast();
+        if (data?.status === "offline") {
           setDemandStatus("offline");
           return;
         }
@@ -108,16 +114,51 @@ getAlerts();
       }
     };
 
+    const getFleet = async () => {
+      try {
+        const data = await fetchFleetData();
+        if (data?.status === "offline") {
+          setFleetStatus("offline");
+          return;
+        }
+        setFleetBuses(Array.isArray(data.buses) ? data.buses : []);
+        setFleetSummary(data.summary ?? null);
+        setFleetStatus(data.status ?? "empty");
+      } catch {
+        setFleetStatus("offline");
+      }
+    };
+
+    const getOperationalData = async () => {
+      const results = await Promise.allSettled([
+        fetchOverviewData(),
+        fetchRoutesData(),
+        fetchFitnessData(),
+      ]);
+      if (results[0].status === "fulfilled") setOverview(results[0].value);
+      if (results[1].status === "fulfilled") setRouteData(results[1].value);
+      if (results[2].status === "fulfilled") setFitnessData(results[2].value);
+    };
+
+    getAlerts();
     pingNeuralApi();
     getDemandForecast();
+    getFleet();
+    getOperationalData();
     const interval = setInterval(getTrafficData, 5000);
+    const alertsInterval = setInterval(getAlerts, 15000);
     const neuralInterval = setInterval(pingNeuralApi, 15000);
     const demandInterval = setInterval(getDemandForecast, 60000);
+    const fleetInterval = setInterval(getFleet, 15000);
+    const operationalInterval = setInterval(getOperationalData, 30000);
 
     return () => {
       clearInterval(interval);
+      clearInterval(alertsInterval);
       clearInterval(neuralInterval);
       clearInterval(demandInterval);
+      clearInterval(fleetInterval);
+      clearInterval(operationalInterval);
     };
   }, []);
 
@@ -127,9 +168,7 @@ getAlerts();
 
     const loadStoredData = async () => {
       const [historyResponse, detectionFeed] = await Promise.all([
-        fetch(apiUrl("/api/traffic-history"))
-          .then((response) => (response.ok ? response.json() : []))
-          .catch(() => []),
+        getTrafficHistory().catch(() => []),
         fetchRecentDetections(),
       ]);
       setTrafficHistory(Array.isArray(historyResponse) ? historyResponse : []);
@@ -144,8 +183,7 @@ getAlerts();
 
     const historyInterval = setInterval(async () => {
       try {
-        const response = await fetch(apiUrl("/api/traffic-history"));
-        const data = await response.json();
+        const data = await getTrafficHistory();
         if (Array.isArray(data)) setTrafficHistory(data);
       } catch (error) {
         console.warn("Traffic history refresh failed:", error);
@@ -194,13 +232,6 @@ getAlerts();
     return trafficStatus === "offline" ? "Feed offline" : "Connecting…";
   };
 
-  const safetyBadge = () => {
-    if (!trafficIsLive) return { label: "NO DATA", className: "badge" };
-    return trafficData.congestion_score < 60
-      ? { label: "SAFE", className: "badge green" }
-      : { label: "CAUTION", className: "badge red" };
-  };
-
   const menuItems = [
   { name: "Dashboard", icon: "📊" },
   { name: "Live Fleet", icon: "🚌" },
@@ -214,195 +245,55 @@ getAlerts();
   { name: "Traffic Simulator", icon: "🚦" },
 ];
 
- const buses = [
-  {
-    id: "HYD-BUS-001",
-    route: "Dilsukhnagar → Mehdipatnam",
-    passengers: 62,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-002",
-    route: "Mehdipatnam → Dilsukhnagar",
-    passengers: 84,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-003",
-    route: "LB Nagar → Secunderabad",
-    passengers: 71,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-004",
-    route: "Secunderabad → LB Nagar",
-    passengers: 91,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-005",
-    route: "Kukatpally → Ameerpet",
-    passengers: 58,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-006",
-    route: "Ameerpet → Kukatpally",
-    passengers: 76,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-007",
-    route: "Gachibowli → Secunderabad",
-    passengers: 88,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-008",
-    route: "Secunderabad → Gachibowli",
-    passengers: 69,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-009",
-    route: "Miyapur → Ameerpet",
-    passengers: 73,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-010",
-    route: "Ameerpet → Miyapur",
-    passengers: 81,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-011",
-    route: "Uppal → Mehdipatnam",
-    passengers: 67,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-012",
-    route: "Mehdipatnam → Uppal",
-    passengers: 79,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-013",
-    route: "Kondapur → Dilsukhnagar",
-    passengers: 64,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-014",
-    route: "Dilsukhnagar → Kondapur",
-    passengers: 86,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-015",
-    route: "Hitech City → Secunderabad",
-    passengers: 93,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-016",
-    route: "Secunderabad → Hitech City",
-    passengers: 72,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-017",
-    route: "LB Nagar → Mehdipatnam",
-    passengers: 61,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-018",
-    route: "Mehdipatnam → LB Nagar",
-    passengers: 83,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-019",
-    route: "Kukatpally → Gachibowli",
-    passengers: 77,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-020",
-    route: "Gachibowli → Kukatpally",
-    passengers: 68,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-021",
-    route: "Uppal → Secunderabad",
-    passengers: 55,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-022",
-    route: "Secunderabad → Uppal",
-    passengers: 74,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-023",
-    route: "Miyapur → Gachibowli",
-    passengers: 89,
-    status: "Delayed",
-  },
-  {
-    id: "HYD-BUS-024",
-    route: "Gachibowli → Miyapur",
-    passengers: 63,
-    status: "On Time",
-  },
-  {
-    id: "HYD-BUS-025",
-    route: "Dilsukhnagar → Hitech City",
-    passengers: 69,
-    status: "On Time",
-  },
-];
-  const routes = buses.map((bus) => ({
-    route: bus.route,
-    vehicle: bus.id,
-  }));
-
-  const highDemandBuses = buses.filter(
-    (bus) => bus.passengers >=80
+ const buses = fleetBuses;
+  const routes = routeData?.routes ?? [];
+  const highDemandBuses =
+    demandStatus === "live"
+      ? buses
+          .map((bus) => ({
+            ...bus,
+            demand: demandForecast?.routes?.find(
+              (route) => route.bus_id === bus.id,
+            ),
+          }))
+          .filter((bus) => bus.demand?.demand_level === "HIGH")
+      : [];
+  const delayedBuses = buses.filter((bus) =>
+    bus.telemetry_status === "live" &&
+    String(bus.operational_status).toUpperCase().includes("DELAY"),
   );
+  const activeAlertCount =
+    (overview?.active_alerts ?? alerts.length) +
+    highDemandBuses.length +
+    delayedBuses.length;
 
-  const delayedBuses = buses.filter(
-    (bus) => bus.status === "Delayed"
-  );
-  const runTrafficSimulation = () => {
-  const currentVehicles = trafficData?.vehicle_count || 50;
-  const change = simulatedVehicles - currentVehicles;
-  const predictedScore = Math.max(
-    0,
-    Math.min(100, (trafficData?.congestion_score || 50) + change * 0.5)
-  );
-
-  setSimulationResult({
-    vehicles: simulatedVehicles,
-    score: Math.round(predictedScore),
-    level:
-      predictedScore < 30
-        ? "Low"
-        : predictedScore < 60
-        ? "Moderate"
-        : predictedScore < 80
-        ? "High"
-        : "Severe",
-  });
-};
+  const runTrafficSimulation = async () => {
+    setSimulationStatus("loading");
+    setSimulationResult(null);
+    try {
+      const result = await simulateTraffic(simulatedVehicles);
+      setSimulationResult(result);
+      setSimulationStatus("live");
+    } catch (error) {
+      setSimulationStatus(error.data?.status ?? "offline");
+      setSimulationResult({
+        error: error.message,
+        status: error.data?.status ?? "offline",
+      });
+    }
+  };
 
   const getStatusClass = (status) => {
-    if (status === "Delayed") return "badge yellow";
-    if (status === "High Demand") return "badge red";
+    const normalized = String(status).toUpperCase();
+    if (
+      ["STALE", "MISSING", "COLLECTING", "LOADING", "CHECKING"].includes(
+        normalized,
+      ) ||
+      normalized.includes("DELAY")
+    ) {
+      return "badge yellow";
+    }
+    if (normalized === "OFFLINE") return "badge red";
     return "badge green";
   };
 
@@ -438,7 +329,7 @@ getAlerts();
               {/* ALERT COUNT */}
               {item.name === "Alerts" && (
                 <small className="alert-count">
-                  {highDemandBuses.length + delayedBuses.length}
+                  {activeAlertCount}
                 </small>
               )}
             </button>
@@ -476,7 +367,11 @@ getAlerts();
           <div className="status-cluster">
             <div className="system-status">
               <span className="status-dot"></span>
-              All systems operational
+              {overview?.status === "operational"
+                ? "All systems operational"
+                : overview
+                  ? "Service degradation detected"
+                  : "Checking system status"}
             </div>
             <span className="command-location">📍 Hyderabad, IN</span>
           </div>
@@ -489,13 +384,27 @@ getAlerts();
   <>
     <section className="command-strip">
       <div>
-        <span className="eyebrow">CITY OPERATIONS · LIVE</span>
+        <span className="eyebrow">
+          CITY OPERATIONS ·{" "}
+          {overview?.status === "operational"
+            ? "LIVE"
+            : overview
+              ? "DEGRADED"
+              : "CHECKING"}
+        </span>
         <h2>One city. One intelligent control layer.</h2>
         <p>Combining fleet telemetry, computer vision and real-time traffic intelligence.</p>
       </div>
       <div className="command-strip-metrics">
-        <span><b>04</b> AI engines</span>
-        <span><b>25</b> connected assets</span>
+        <span>
+          <b>
+            {overview?.models
+              ? Object.values(overview.models).filter(Boolean).length
+              : "—"}
+          </b>{" "}
+          AI engines
+        </span>
+        <span><b>{fleetSummary?.total ?? "—"}</b> configured assets</span>
         <span><b>24/7</b> monitoring</span>
       </div>
     </section>
@@ -509,19 +418,23 @@ getAlerts();
       <div className="stat-card">
         <span>🚌</span>
         <p>Total Buses</p>
-        <h2>25</h2>
+        <h2>{fleetSummary?.total ?? "—"}</h2>
       </div>
 
       <div className="stat-card">
         <span>🟢</span>
-        <p>Active Buses</p>
-        <h2>19</h2>
+        <p>Live Telemetry</p>
+        <h2>{fleetSummary?.live ?? "—"}</h2>
       </div>
 
       <div className="stat-card">
         <span>🟡</span>
-        <p>Delayed</p>
-        <h2>{delayedBuses.length}</h2>
+        <p>Stale / Missing</p>
+        <h2>
+          {fleetSummary
+            ? `${fleetSummary.stale} / ${fleetSummary.missing ?? 0}`
+            : "—"}
+        </h2>
       </div>
 
       <div className="stat-card">
@@ -697,17 +610,17 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             </h3>
 
             <p>
-              {bus.route}
+              {bus.route_name}
             </p>
 
             <strong>
-              Passengers {bus.passengers}
+              {bus.speed ?? "—"} km/h
             </strong>
 
             <span
-              className={getStatusClass(bus.status)}
+              className={getStatusClass(bus.telemetry_status)}
             >
-              {bus.status}
+              {bus.telemetry_status}
             </span>
 
           </div>
@@ -762,9 +675,30 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
         {activePage === "Live Fleet" && (
           <>
-            <h2 className="page-title">
-              Live Fleet
-            </h2>
+            <div className="page-heading">
+              <div>
+                <span className="eyebrow">SUPABASE · VEHICLE TELEMETRY</span>
+                <h2 className="page-title">Live Fleet</h2>
+                <p>Bus position, speed and route data from the fleet database.</p>
+              </div>
+              <span className={`model-chip ${
+                fleetStatus === "live"
+                  ? "is-live"
+                  : ["loading", "stale", "missing"].includes(fleetStatus)
+                    ? "is-checking"
+                    : "is-offline"
+              }`}>
+                {fleetStatus === "live"
+                  ? "FLEET · LIVE"
+                  : fleetStatus === "stale"
+                    ? "FLEET · STALE"
+                    : fleetStatus === "missing"
+                      ? "FLEET · NO SIGNAL"
+                    : fleetStatus === "offline"
+                      ? "FLEET · OFFLINE"
+                      : "FLEET · CONNECTING"}
+              </span>
+            </div>
 
             <section className="section-card">
 
@@ -773,11 +707,47 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
               </h2>
 
               <p>
-                All currently monitored public
-                transport vehicles
+                Configured public transport vehicles with telemetry freshness
               </p>
 
+              {(fleetStatus === "stale" || fleetStatus === "missing") && (
+                <div className="inline-error">
+                  <span>!</span>
+                  <div>
+                    <strong>
+                      {fleetStatus === "stale"
+                        ? "Fleet telemetry is stale"
+                        : "Configured vehicles have no telemetry"}
+                    </strong>
+                    <p>
+                      {fleetStatus === "stale"
+                        ? "The buses below come from Supabase, but their last location updates are older than five minutes."
+                        : "Reference vehicles are loaded from Supabase; GPS ingestion has not reported a current position."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {fleetStatus === "offline" && (
+                <div className="inline-error">
+                  <span>!</span>
+                  <div>
+                    <strong>Fleet API offline</strong>
+                    <p>Vehicle data remains unavailable until the backend reconnects.</p>
+                  </div>
+                </div>
+              )}
+
               <div className="bus-grid">
+
+                {buses.length === 0 && fleetStatus !== "loading" && (
+                  <div className="bus-card">
+                    <div className="bus-icon">🚌</div>
+                    <h3>No fleet rows</h3>
+                    <p>Waiting for configured vehicles.</p>
+                    <span className="badge">EMPTY</span>
+                  </div>
+                )}
 
                 {buses.map((bus) => (
                   <div
@@ -791,16 +761,16 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
                     <h3>{bus.id}</h3>
 
-                    <p>{bus.route}</p>
+                    <p>{bus.route_name}</p>
 
                     <strong>
-                      Passengers {bus.passengers}
+                      Speed {bus.speed ?? "—"} km/h
                     </strong>
 
                     <span
-                      className={getStatusClass(bus.status)}
+                      className={getStatusClass(bus.telemetry_status)}
                     >
-                      {bus.status}
+                      {bus.telemetry_status}
                     </span>
 
                   </div>
@@ -820,7 +790,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                 Current bus locations
               </p>
 
-              <LiveMap />
+              <LiveMap buses={buses} telemetryStatus={fleetStatus} />
 
             </section>
 
@@ -897,6 +867,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             console.log("Pothole detection result:", data);
 
             setDetections(data.detections || []);
+            setRoadRisk(data.road_risk ?? null);
             logDetection("pothole", data.detections || []);
 
             const imageUrl = URL.createObjectURL(file);
@@ -917,6 +888,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             console.error("Pothole detection error:", error);
             setNeuralStatus("offline");
             setDetections([]);
+            setRoadRisk(null);
             setDetectionError(
               "The AI service could not process this image. Hugging Face looks unreachable — try again when YOLO shows LIVE."
             );
@@ -975,7 +947,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             <div className="result-panel">
               <div className="assessment-score">
                 <span>ROAD RISK</span>
-                <strong>{detections.length === 0 ? "LOW" : detections.length >= 3 ? "HIGH" : "MODERATE"}</strong>
+                <strong>{roadRisk ?? "UNKNOWN"}</strong>
               </div>
               {detections.length > 0 ? (
                 <div className="detection-list">
@@ -1141,19 +1113,9 @@ alert(
     logDetection("garbage", garbageData.detections || []);
 
     if (garbageData.detections && garbageData.detections.length > 0) {
-      const newGarbageAlert = {
-        id: Date.now(),
-        type: "GARBAGE",
-        message:
-          `🗑️ Garbage detected by camera. ` +
-          `${garbageData.detections.length} waste object(s) found.`,
-        time: new Date().toLocaleTimeString(),
-      };
-
-      setGarbageAlerts((previousAlerts) => [
-        newGarbageAlert,
-        ...previousAlerts,
-      ]);
+      fetchAlertsData()
+        .then((data) => setAlerts(Array.isArray(data) ? data : []))
+        .catch(() => {});
 
       alert(
 `🗑️ Garbage detected: ${garbageData.detections.length}`
@@ -1330,11 +1292,32 @@ alert(
       <button
         className="primary-button"
         onClick={runTrafficSimulation}
+        disabled={!trafficIsLive || simulationStatus === "loading"}
       >
-        🚦 Run Simulation
+        {simulationStatus === "loading" ? "Running…" : "🚦 Run Simulation"}
       </button>
 
-      {simulationResult && (
+      {!trafficIsLive && (
+        <div className="inline-error">
+          <span>!</span>
+          <div>
+            <strong>Live traffic baseline unavailable</strong>
+            <p>The simulator is disabled until TomTom reconnects.</p>
+          </div>
+        </div>
+      )}
+
+      {simulationResult?.error && (
+        <div className="inline-error">
+          <span>!</span>
+          <div>
+            <strong>Simulation is collecting real density data</strong>
+            <p>{simulationResult.error}</p>
+          </div>
+        </div>
+      )}
+
+      {simulationResult && !simulationResult.error && (
         <div className="route-card">
           <div className="route-icon">📊</div>
 
@@ -1344,7 +1327,7 @@ alert(
             <p style={{ fontSize: "18px" }}>
               📍 Current Score:{" "}
               <strong>
-                {trafficData?.congestion_score ?? "N/A"}/100
+                {simulationResult.current_score}/100
               </strong>
             </p>
 
@@ -1354,10 +1337,10 @@ alert(
                 {simulationResult.score}/100
               </strong>{" "}
               {simulationResult.score >
-              (trafficData?.congestion_score ?? 0)
+              simulationResult.current_score
                 ? "🔺"
                 : simulationResult.score <
-                  (trafficData?.congestion_score ?? 0)
+                  simulationResult.current_score
                 ? "🔻"
                 : "➡️"}
             </p>
@@ -1368,19 +1351,19 @@ alert(
                 style={{
                   color:
                     simulationResult.score >
-                    (trafficData?.congestion_score ?? 0)
+                    simulationResult.current_score
                       ? "#ef4444"
                       : simulationResult.score <
-                        (trafficData?.congestion_score ?? 0)
+                        simulationResult.current_score
                       ? "#22c55e"
                       : "#f59e0b"
                 }}
               >
                 {simulationResult.score >
-                (trafficData?.congestion_score ?? 0)
+                simulationResult.current_score
                   ? "🔴 Increased"
                   : simulationResult.score <
-                    (trafficData?.congestion_score ?? 0)
+                    simulationResult.current_score
                   ? "🟢 Improved"
                   : "🟡 No Change"}
               </strong>
@@ -1392,7 +1375,8 @@ alert(
             </p>
 
             <small>
-              🚗 Scenario: {simulationResult.vehicles} simulated vehicles
+              🚗 Scenario: {simulationResult.vehicles} vehicles · observed baseline{" "}
+              {simulationResult.baseline_vehicle_count}
             </small>
           </div>
         </div>
@@ -1420,10 +1404,21 @@ alert(
 
               <div className="route-list">
 
-                {routes.map((item, index) => (
+                {routes.length === 0 && (
+                  <div className="route-card">
+                    <div className="route-icon">🗺️</div>
+                    <div>
+                      <h3>No routes configured</h3>
+                      <p>The route catalog is empty or offline.</p>
+                    </div>
+                    <span className="badge">EMPTY</span>
+                  </div>
+                )}
+
+                {routes.map((item) => (
                   <div
                     className="route-card"
-                    key={index}
+                    key={item.route_id}
                   >
 
                     <div className="route-icon">
@@ -1432,16 +1427,23 @@ alert(
 
                     <div>
                       <h3>
-                        {item.route}
+                        {item.name}
                       </h3>
 
                       <p>
-                        Vehicle: {item.vehicle}
+                        {item.origin && item.destination
+                          ? `${item.origin} → ${item.destination}`
+                          : item.route_id}
                       </p>
+                      <small>
+                        {item.congestion_score !== null
+                          ? `Traffic ${item.congestion_score}/100`
+                          : "Waiting for route conditions"}
+                      </small>
                     </div>
 
-                    <span className="badge green">
-                      ACTIVE
+                    <span className={getStatusClass(item.condition_status)}>
+                      {item.condition_status}
                     </span>
 
                   </div>
@@ -1464,60 +1466,41 @@ alert(
                 potholes and road conditions.
               </p>
 
+              {routeData?.status === "live" && routeData.recommended ? (
+                <div className="route-card">
+                  <div className="route-icon">🧠</div>
+                  <div>
+                    <h3>{routeData.recommended.name}</h3>
+                    <p>Route score: {routeData.recommended.score}/100</p>
+                    <small>
+                      {routeData.recommended.pothole_count} potholes ·{" "}
+                      {routeData.recommended.waterlogging_count} waterlogging events
+                    </small>
+                  </div>
+                  <span className="badge green">RECOMMENDED</span>
+                </div>
+              ) : (
+                <div className="inline-error">
+                  <span>!</span>
+                  <div>
+                    <strong>Recommendation is collecting real route signals</strong>
+                    <p>
+                      {routeData?.message ??
+                        "The route API is connecting to Supabase."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <button
                 className="primary-button"
-                onClick={async () => {
-                const trafficResponse = await fetch(
-                 apiUrl("/api/traffic")
-                );
-
-                 const trafficData = await trafficResponse.json();
-
-                 console.log("Live Traffic Data:", trafficData);
-                  const routes = [
-               {
-                       name: "Dilsukhnagar → Mehdipatnam",
-                       traffic: trafficData.congestion_score + 8,
-                       potholes: 2,
-                        waterlogging: 1
-                },
-               {
-                         name: "LB Nagar → Secunderabad",
-                        traffic: trafficData.congestion_score + 15,
-                         potholes: 4,
-                        waterlogging: 2
-                 },
-                {
-                          name: "Kukatpally → Ameerpet",
-                           traffic: trafficData.congestion_score - 5,
-                           potholes: 1,
-                           waterlogging: 0
-                 }
-                ];
-                  const scoredRoutes = routes.map((route) => {
-
-                    const score =
-                      route.traffic +
-                      (detections.length * 10) +
-                        (route.waterlogging * 15);
-                    return {
-                      ...route,
-                      score
-                    };
-
-                  });
-
-                  scoredRoutes.sort(
-                    (a, b) => a.score - b.score
-                  );
-
-                  alert(
-                    `Recommended Route:\n\n${scoredRoutes[0].name}\n\nRoute Score: ${scoredRoutes[0].score}\n\nLower score = better route`
-                  );
-
-                }}
+                onClick={() =>
+                  fetchRoutesData()
+                    .then(setRouteData)
+                    .catch(() => setRouteData({ status: "offline", routes: [] }))
+                }
               >
-                🧠 Find Best Route
+                Refresh Route Signals
               </button>
 
             </section>
@@ -1549,126 +1532,63 @@ alert(
                 </div>
 
                 <span className="alert-total">
-                 {highDemandBuses.length +
-                   delayedBuses.length +
-                   alerts.length} Active 
-               Alerts
+                  {activeAlertCount} Active Alerts
               </span>
               </div>
 
-              {/* AI HIGH DEMAND ALERTS */}
-
               {highDemandBuses.map((bus) => (
-                <div
-                  className="alert-card red-alert"
-                  key={bus.id}
-                >
-
-                  <span className="alert-icon">
-                    🔴
-                  </span>
-
+                <div className="alert-card red-alert" key={`demand-${bus.id}`}>
+                  <span className="alert-icon">🔴</span>
                   <div>
-
-                    <h3>
-                      High Passenger Demand
-                    </h3>
-
+                    <h3>High Passenger Demand</h3>
                     <p>
-                      {bus.id} on{" "}
-                      <strong>
-                        {bus.route}
-                      </strong>{" "}
-                      has {bus.passengers} passengers.
+                      {bus.id} on <strong>{bus.route_name}</strong> has a{" "}
+                      {bus.demand.demand_score}% demand score.
                     </p>
-
                     <small>
-                      🤖 AI Recommendation:
-                      Add an additional bus to
-                      this route.
+                      🤖 AI Recommendation: Increase capacity on this route.
                     </small>
-
                   </div>
-
                 </div>
               ))}
-
-              {/* DELAY ALERTS */}
 
               {delayedBuses.map((bus) => (
-                <div
-                  className="alert-card yellow-alert"
-                  key={bus.id}
-                >
-
-                  <span className="alert-icon">
-                    🟡
-                  </span>
-
+                <div className="alert-card yellow-alert" key={`delay-${bus.id}`}>
+                  <span className="alert-icon">🟡</span>
                   <div>
-
-                    <h3>
-                      Bus Delay Detected
-                    </h3>
-
+                    <h3>Bus Delay Detected</h3>
                     <p>
-                      {bus.id} on{" "}
-                      <strong>
-                        {bus.route}
-                      </strong>{" "}
-                      is currently delayed.
+                      {bus.id} on <strong>{bus.route_name}</strong> is delayed.
                     </p>
-
                     <small>
-                      🤖 AI Recommendation:
-                      Monitor route and adjust
-                      fleet scheduling.
+                      🤖 AI Recommendation: Monitor and adjust fleet scheduling.
                     </small>
-
                   </div>
-
                 </div>
               ))}
-{/* GARBAGE AI ALERTS */}
 
-{garbageAlerts.map((alert) => (
-  <div
-    className="alert-card yellow-alert"
-    key={alert.id}
-  >
+              {alerts.length === 0 &&
+                highDemandBuses.length === 0 &&
+                delayedBuses.length === 0 && (
+                  <div className="route-card">
+                    <div className="route-icon">🔔</div>
+                    <div>
+                      <h3>No active alerts</h3>
+                      <p>No alert rows or derived fleet alerts are currently active.</p>
+                    </div>
+                    <span className="badge green">CLEAR</span>
+                  </div>
+                )}
 
-    <span className="alert-icon">
-      🗑️
-    </span>
-
-    <div>
-
-      <h3>
-        Garbage Detected
-      </h3>
-
-      <p>
-        {alert.message}
-      </p>
-
-      <small>
-        🤖 AI Recommendation:
-        Schedule cleaning for the detected area.
-      </small>
-
-      <small>
-        🕒 {alert.time}
-      </small>
-
-    </div>
-
-  </div>
-))}
 {/* BACKEND AI ALERTS */}
 
 {alerts.map((alert) => (
   <div
-    className="alert-card yellow-alert"
+    className={`alert-card ${
+      String(alert.severity).toUpperCase() === "HIGH"
+        ? "red-alert"
+        : "yellow-alert"
+    }`}
     key={alert.id}
   >
     <span className="alert-icon">
@@ -1677,7 +1597,7 @@ alert(
 
     <div>
       <h3>
-        {alert.type} Detected
+        {alert.title || `${alert.type} Detected`}
       </h3>
 
       <p>
@@ -1688,8 +1608,14 @@ alert(
         📍 {alert.location}
       </small>
 
+      {alert.recommendation && (
+        <small>🤖 AI Recommendation: {alert.recommendation}</small>
+      )}
+
       <small>
-        🕒 {new Date(alert.timestamp).toLocaleString()}
+        🕒 {alert.timestamp
+          ? new Date(alert.timestamp).toLocaleString()
+          : "Timestamp unavailable"}
       </small>
     </div>
   </div>
@@ -1697,7 +1623,13 @@ alert(
 
               {/* SYSTEM STATUS */}
 
-              <div className="alert-card green-alert">
+              <div
+                className={`alert-card ${
+                  overview?.status === "operational"
+                    ? "green-alert"
+                    : "yellow-alert"
+                }`}
+              >
 
                 <span className="alert-icon">
                   🟢
@@ -1706,17 +1638,23 @@ alert(
                 <div>
 
                   <h3>
-                    System Operational
+                    {overview?.status === "operational"
+                      ? "System Operational"
+                      : "System Degraded"}
                   </h3>
 
                   <p>
-                    AI fleet monitoring and
-                    prediction services are active.
+                    {overview?.status === "operational"
+                      ? "AI fleet monitoring and prediction services are active."
+                      : "One or more live data services need attention."}
                   </p>
 
                   <small>
-                    ✅ All monitoring services
-                    are running normally.
+                    {overview
+                      ? Object.entries(overview.services)
+                          .map(([name, status]) => `${name}: ${status}`)
+                          .join(" · ")
+                      : "Checking service freshness…"}
                   </small>
 
                 </div>
@@ -1748,72 +1686,59 @@ alert(
       </p>
 
       <div className="route-list">
+        {fitnessData?.routes?.length ? (
+          fitnessData.routes.map((route) => (
+            <div className="route-card" key={route.route_code}>
+              <div className="route-icon">
+                {{
+                  walking: "🚶",
+                  jogging: "🏃",
+                  cycling: "🚴",
+                }[route.activity_type] ?? "🏃"}
+              </div>
 
-        {/* WALKING */}
+              <div>
+                <h3>{route.name}</h3>
+                <p>
+                  {route.distance_km
+                    ? `${route.distance_km} km`
+                    : "Distance pending"}
+                  {route.duration_minutes
+                    ? ` • Approx. ${route.duration_minutes} min`
+                    : ""}
+                </p>
+                <small>
+                  {route.congestion_score !== null
+                    ? `Traffic Score: ${route.congestion_score}/100`
+                    : "Live traffic overlay unavailable"}
+                </small>
+              </div>
 
-        <div className="route-card">
-          <div className="route-icon">🚶</div>
-
-          <div>
-            <h3>Walking Route</h3>
-
-            <p>
-              2.4 km • Approx. 30 min
-            </p>
-
-            <small>
-              Traffic: {trafficField(trafficData?.congestion_level)}
-            </small>
+              <span
+                className={
+                  route.safety === "SAFE"
+                    ? "badge green"
+                    : route.safety === "CAUTION"
+                      ? "badge red"
+                      : "badge"
+                }
+              >
+                {route.safety}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="route-card">
+            <div className="route-icon">📍</div>
+            <div>
+              <h3>No verified fitness routes configured</h3>
+              <p>
+                Add verified routes in Supabase to enable live safety overlays.
+              </p>
+            </div>
+            <span className="badge">EMPTY</span>
           </div>
-
-          <span className={safetyBadge().className}>
-            {safetyBadge().label}
-          </span>
-        </div>
-
-        {/* JOGGING */}
-
-        <div className="route-card">
-          <div className="route-icon">🏃</div>
-
-          <div>
-            <h3>Jogging Route</h3>
-
-            <p>
-              3.2 km • Live Traffic Based
-            </p>
-
-            <small>
-              Traffic Score: {trafficField(trafficData?.congestion_score)}
-            </small>
-          </div>
-
-          <span className={safetyBadge().className}>
-            {safetyBadge().label}
-          </span>
-        </div>
-
-        {/* CYCLING */}
-
-        <div className="route-card">
-          <div className="route-icon">🚴</div>
-
-          <div>
-            <h3>Cycling Route</h3>
-
-            <p>
-              4.1 km • Live Road Analysis
-            </p>
-
-            <small>
-              Current Speed: {trafficField(trafficData?.current_speed, " km/h")}
-            </small>
-          </div>
-
-          <span className={safetyBadge().className}>
-            {safetyBadge().label}
-          </span>
-        </div>
+        )}
 
       </div>
 
@@ -1961,36 +1886,34 @@ alert(
     <section className="section-card">
 
       <h2>
-        ⚽ Nearby Sports Facilities
+        ⚽ Verified Sports Facilities
       </h2>
 
       <div className="route-list">
-
-        <div className="route-card">
-
-          <div className="route-icon">
-            🌳
+        {fitnessData?.facilities?.length ? (
+          fitnessData.facilities.map((facility) => (
+            <div className="route-card" key={facility.facility_code}>
+              <div className="route-icon">🏟️</div>
+              <div>
+                <h3>{facility.name}</h3>
+                <p>
+                  {facility.activities.length
+                    ? facility.activities.join(" & ")
+                    : facility.facility_type}
+                </p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="route-card">
+            <div className="route-icon">🏟️</div>
+            <div>
+              <h3>No verified facilities configured</h3>
+              <p>Only verified Supabase facilities are shown here.</p>
+            </div>
+            <span className="badge">EMPTY</span>
           </div>
-
-          <div>
-            <h3>Public Park</h3>
-            <p>Walking & Jogging</p>
-          </div>
-
-        </div>
-
-        <div className="route-card">
-
-          <div className="route-icon">
-            🏟️
-          </div>
-
-          <div>
-            <h3>Sports Ground</h3>
-            <p>Outdoor Sports</p>
-          </div>
-
-        </div>
+        )}
 
       </div>
 

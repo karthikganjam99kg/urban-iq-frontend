@@ -1426,6 +1426,12 @@ nav {
   font-weight: 650;
 }
 
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
 .detector-shell {
   padding: 28px;
 }

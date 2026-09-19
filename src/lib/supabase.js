@@ -8,67 +8,56 @@ export const supabase =
 
 export const supabaseEnabled = Boolean(supabase);
 
-// Traffic polls every 5s, but one stored snapshot per minute is enough history.
-const SNAPSHOT_INTERVAL_MS = 60_000;
-let lastSnapshotAt = 0;
+const KIND_TO_DAMAGE = {
+  pothole: "pothole",
+  garbage: "garbage",
+  vehicle: "vehicle_cluster",
+  plate: "plate",
+};
 
-export async function recordTrafficSnapshot(traffic) {
-  if (!supabase || !traffic) return;
-
-  const now = Date.now();
-  if (now - lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return;
-  lastSnapshotAt = now;
-
-  const { error } = await supabase.from("traffic_snapshots").insert({
-    city: traffic.city ?? "Hyderabad",
-    current_speed: traffic.current_speed,
-    free_flow_speed: traffic.free_flow_speed,
-    congestion_score: traffic.congestion_score,
-    congestion_level: traffic.congestion_level,
-    confidence: traffic.confidence,
-    road_closure: traffic.road_closure,
-  });
-
-  if (error) console.warn("Supabase snapshot failed:", error.message);
+function asPercent(value) {
+  if (typeof value !== "number") return null;
+  return value <= 1 ? value * 100 : value;
 }
 
-export async function recordDetection({ kind, count, confidence, meta }) {
+export async function recordTrafficSnapshot() {
+  // traffic_realtime is written by the Flask API with the service role.
+}
+
+export async function recordDetection({ kind, count, confidence }) {
   if (!supabase) return;
 
-  const { error } = await supabase.from("detections").insert({
-    kind,
-    count,
-    confidence,
-    meta: meta ?? null,
+  const { error } = await supabase.from("road_damage").insert({
+    detection_id: `UIQ-${kind}-${Date.now()}`,
+    damage_type: KIND_TO_DAMAGE[kind] ?? kind,
+    confidence: asPercent(confidence) ?? count ?? 0,
+    source: `UrbanIQ-web:${count ?? 0}`,
+    status: "DETECTED",
   });
 
   if (error) console.warn("Supabase detection failed:", error.message);
 }
 
-export async function fetchTrafficHistory(limit = 30) {
-  if (!supabase) return [];
-
-  const { data, error } = await supabase
-    .from("traffic_snapshots")
-    .select("congestion_score, congestion_level, current_speed, captured_at")
-    .order("captured_at", { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.warn("Supabase history failed:", error.message);
-    return [];
-  }
-
-  return (data ?? []).reverse();
+function normalizeDamageRow(row) {
+  const source = row.source ?? "";
+  const countMatch = /:(\d+)$/.exec(source);
+  const kind = (row.damage_type ?? "pothole").replace("vehicle_cluster", "vehicle");
+  return {
+    id: `road_damage-${row.id}`,
+    kind,
+    count: countMatch ? Number(countMatch[1]) : 1,
+    confidence: asPercent(Number(row.confidence)),
+    detected_at: row.timestamp ?? row.created_at,
+  };
 }
 
 export async function fetchRecentDetections(limit = 8) {
   if (!supabase) return [];
 
   const { data, error } = await supabase
-    .from("detections")
-    .select("id, kind, count, confidence, detected_at")
-    .order("detected_at", { ascending: false })
+    .from("road_damage")
+    .select("id, damage_type, confidence, source, timestamp, created_at")
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
@@ -76,18 +65,18 @@ export async function fetchRecentDetections(limit = 8) {
     return [];
   }
 
-  return data ?? [];
+  return (data ?? []).map(normalizeDamageRow);
 }
 
 export function subscribeToDetections(onInsert) {
   if (!supabase) return () => {};
 
   const channel = supabase
-    .channel("detections-feed")
+    .channel("road-damage-feed")
     .on(
       "postgres_changes",
-      { event: "INSERT", schema: "public", table: "detections" },
-      (payload) => onInsert(payload.new)
+      { event: "INSERT", schema: "public", table: "road_damage" },
+      (payload) => onInsert(normalizeDamageRow(payload.new))
     )
     .subscribe();
 

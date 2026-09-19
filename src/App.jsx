@@ -4,7 +4,6 @@ import {
   supabaseEnabled,
   recordTrafficSnapshot,
   recordDetection,
-  fetchTrafficHistory,
   fetchRecentDetections,
   subscribeToDetections,
 } from "./lib/supabase";
@@ -81,11 +80,13 @@ getAlerts();
     if (!supabaseEnabled) return;
 
     const loadStoredData = async () => {
-      const [history, detectionFeed] = await Promise.all([
-        fetchTrafficHistory(),
+      const [historyResponse, detectionFeed] = await Promise.all([
+        fetch(apiUrl("/api/traffic-history"))
+          .then((response) => (response.ok ? response.json() : []))
+          .catch(() => []),
         fetchRecentDetections(),
       ]);
-      setTrafficHistory(history);
+      setTrafficHistory(Array.isArray(historyResponse) ? historyResponse : []);
       setLiveDetections(detectionFeed);
     };
 
@@ -96,7 +97,13 @@ getAlerts();
     });
 
     const historyInterval = setInterval(async () => {
-      setTrafficHistory(await fetchTrafficHistory());
+      try {
+        const response = await fetch(apiUrl("/api/traffic-history"));
+        const data = await response.json();
+        if (Array.isArray(data)) setTrafficHistory(data);
+      } catch (error) {
+        console.warn("Traffic history refresh failed:", error);
+      }
     }, 60000);
 
     return () => {

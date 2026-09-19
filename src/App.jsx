@@ -27,10 +27,11 @@ function describeBaseline(result) {
       : `observed baseline ${result.baseline_vehicle_count}`;
   }
   if (baseline.status === "live") {
-    return `observed baseline ${baseline.vehicle_count} from ${baseline.sample_size} recent frame(s)`;
+    const frames = baseline.sample_size === 1 ? "frame" : "frames";
+    return `recent camera average ${baseline.vehicle_count} vehicles/frame (${baseline.sample_size} ${frames})`;
   }
   if (baseline.status === "stale") {
-    return `last observed baseline ${baseline.vehicle_count}, ${baseline.age_minutes} min old`;
+    return `last observed ${baseline.vehicle_count} vehicles/frame, ${baseline.age_minutes} min old`;
   }
   return "no camera observations recorded yet";
 }

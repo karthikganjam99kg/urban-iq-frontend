@@ -32,9 +32,9 @@ is already moving.
 | 📊 **Dashboard** | City-wide vitals, congestion pulse, incident rollup | `/api/overview` + TomTom |
 | 🚌 **Live Fleet** | Bus roster, route status, live map, freshness | Supabase fleet catalog + telemetry |
 | 🤖 **AI Prediction** | Gated one-hour crowd-demand proxy | Supabase `vehicle_density` + rolling model |
-| 🕳️ **Pothole Detection** | Upload or capture a frame, get boxed potholes + confidence | YOLO `pothole2v.pt` |
-| 🗑️ **Garbage Detection** | Flags waste hotspots and raises alerts | YOLO `best.pt` |
-| 🚗 **Vehicle + Plate AI** | Counts vehicles, reads plates, scores rash motion | YOLO `yolo11n.pt` + EasyOCR |
+| 🕳️ **Pothole Detection** | Upload a road frame, get boxed potholes + confidence | YOLO `pothole2v.pt` |
+| 📷 **Camera** | Captures one frame for pothole, garbage and vehicle analysis | Three backend vision endpoints |
+| 🚗 **Vehicle + Plate AI** | Counts vehicles, reads plates, scores rash motion | YOLO `vehicle.pt` + EasyOCR |
 | 🗺️ **Routes** | Catalog and gated best-route recommendation | Supabase route conditions |
 | 🏃 **Fitness & Sports** | Verified routes/facilities with a live safety overlay | Supabase catalog + TomTom |
 | 🚦 **Traffic Simulator** | Stress-test congestion scenarios from a recent baseline | TomTom + vehicle density |
@@ -55,6 +55,30 @@ flowchart LR
 **Why split?** YOLO weights and Torch will never fit a serverless function. The UI ships as
 static assets on Vercel's edge; the heavy vision stack lives on a CPU Docker Space that can
 hold models in memory. The two only ever speak JSON.
+
+### Repository layout
+
+```text
+src/
+├── components/
+│   ├── feedback/       # splash and transient UI feedback
+│   ├── layout/         # sidebar and command-centre header
+│   └── maps/           # Leaflet fleet map
+├── constants/          # stable navigation configuration
+├── lib/                # API, Supabase and formatting helpers
+├── styles/             # product theme and responsive layouts
+├── App.jsx             # shared state, data orchestration and page composition
+├── index.css           # minimal browser/root reset
+└── main.jsx            # React entry point
+public/
+├── fleet-device.html   # standalone operator GPS sender, outside React
+└── robots.txt
+supabase/schema.sql     # pointer to the canonical backend migration
+```
+
+Layout components own navigation accessibility. On screens below 750 px the
+sidebar intentionally renders as an icon rail; every button retains an accessible
+name and tooltip.
 
 ## 🚀 Quickstart
 

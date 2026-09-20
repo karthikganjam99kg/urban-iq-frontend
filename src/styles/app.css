@@ -460,8 +460,15 @@ nav {
   color: white;
 }
 
-.nav-item span {
+.nav-item .nav-icon {
   font-size: 18px;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .alert-count {
@@ -1309,44 +1316,6 @@ footer {
 
 @media (max-width: 750px) {
 
-  .sidebar {
-    width: 70px;
-    padding: 15px 8px;
-  }
-
-  .brand {
-    justify-content: center;
-    padding-bottom: 20px;
-  }
-
-  .brand > div:last-child,
-  .sidebar-bottom {
-    display: none;
-  }
-
-  .nav-item {
-    justify-content: center;
-    padding: 13px 5px;
-  }
-
-  .nav-item {
-    font-size: 0;
-  }
-
-  .nav-item span {
-    font-size: 20px;
-  }
-
-  .alert-count {
-    display: none;
-  }
-
-  .main {
-    margin-left: 70px;
-    width: calc(100% - 70px);
-    padding: 20px;
-  }
-
   .topbar {
     flex-direction: column;
     gap: 15px;
@@ -1489,7 +1458,7 @@ nav {
   box-shadow: inset 3px 0 0 var(--cyan-400);
 }
 
-.nav-item span {
+.nav-item .nav-icon {
   width: 22px;
   text-align: center;
   font-size: 16px;
@@ -2388,6 +2357,12 @@ footer {
 
   .sidebar {
     width: 72px;
+    padding: 15px 8px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 8px 0 20px;
   }
 
   .main {
@@ -2398,6 +2373,7 @@ footer {
 
   .brand h2,
   .brand small,
+  .brand > div:last-child,
   .status-cluster,
   .sidebar-bottom {
     display: none;
@@ -2407,11 +2383,15 @@ footer {
     justify-content: center;
     gap: 0;
     padding: 11px 8px;
-    font-size: 0;
   }
 
-  .nav-item > span {
-    font-size: 15px;
+  .nav-item .nav-icon {
+    width: auto;
+    font-size: 18px;
+  }
+
+  .nav-item .nav-label {
+    display: none;
   }
 
   .nav-item .alert-count {

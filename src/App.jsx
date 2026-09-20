@@ -1,5 +1,10 @@
 import { useState,useEffect,useRef } from "react";
-import LiveMap from "./LiveMap";
+import BootSplash from "./components/feedback/BootSplash";
+import AppHeader from "./components/layout/AppHeader";
+import AppSidebar from "./components/layout/AppSidebar";
+import LiveMap from "./components/maps/LiveMap";
+import { BOOT_CHECK_NAMES } from "./constants/services";
+import RoadSafetyPage from "./pages/RoadSafetyPage";
 import {
   supabaseEnabled,
   recordDetection,
@@ -17,134 +22,12 @@ import {
   getTrafficHistory,
   simulateTraffic,
 } from "./lib/api";
-import "./App.css";
-
-const BOOT_CHECK_NAMES = [
-  "traffic",
-  "vision",
-  "fleet",
-  "demand",
-  "overview",
-  "routes",
-  "fitness",
-];
-
-const BOOT_SERVICES = [
-  { label: "Traffic network", checks: ["traffic"] },
-  { label: "AI vision engine", checks: ["vision"] },
-  { label: "Fleet & telemetry", checks: ["fleet"] },
-  {
-    label: "City intelligence",
-    checks: ["demand", "overview", "routes", "fitness"],
-  },
-];
-
-function BootSplash({ checks, leaving }) {
-  const completed = BOOT_CHECK_NAMES.filter(
-    (name) => checks[name] !== "checking",
-  ).length;
-  const progress = Math.round((completed / BOOT_CHECK_NAMES.length) * 100);
-
-  const serviceState = (names) => {
-    const states = names.map((name) => checks[name]);
-    if (states.every((state) => state === "checking")) return "checking";
-    if (states.some((state) => state === "checking")) return "checking";
-    if (states.some((state) => state === "offline")) return "offline";
-    return "ready";
-  };
-
-  return (
-    <div
-      className={`boot-splash${leaving ? " is-leaving" : ""}`}
-      role="status"
-      aria-live="polite"
-      aria-label={`UrbanIQ is preparing city services, ${progress}% complete`}
-    >
-      <div className="boot-grid" aria-hidden="true" />
-      <div className="boot-glow boot-glow-one" aria-hidden="true" />
-      <div className="boot-glow boot-glow-two" aria-hidden="true" />
-
-      <div className="boot-panel">
-        <div className="boot-mark" aria-hidden="true">
-          <span className="boot-orbit boot-orbit-one" />
-          <span className="boot-orbit boot-orbit-two" />
-          <span className="boot-mark-core">⌁</span>
-        </div>
-
-        <div className="boot-brand">
-          <span>URBAN</span>IQ
-        </div>
-        <p className="boot-kicker">HYDERABAD CITY INTELLIGENCE OS</p>
-        <h1>Bringing the city online</h1>
-        <p className="boot-copy">
-          Connecting live traffic, fleet telemetry and AI services.
-        </p>
-
-        <div className="boot-progress" aria-hidden="true">
-          <span style={{ width: `${progress}%` }} />
-        </div>
-
-        <div className="boot-services">
-          {BOOT_SERVICES.map((service) => {
-            const state = serviceState(service.checks);
-            return (
-              <div className={`boot-service ${state}`} key={service.label}>
-                <span className="boot-service-dot" aria-hidden="true" />
-                <span>{service.label}</span>
-                <small>
-                  {state === "checking"
-                    ? "Checking"
-                    : state === "offline"
-                      ? "Offline"
-                      : "Ready"}
-                </small>
-              </div>
-            );
-          })}
-        </div>
-
-        <p className="boot-footnote">
-          {completed === BOOT_CHECK_NAMES.length
-            ? Object.values(checks).some((state) => state === "offline")
-              ? "Command centre ready with unavailable services"
-              : "Command centre ready"
-            : `Running service checks · ${progress}%`}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function describeBaseline(result) {
-  const baseline = result.baseline;
-  if (!baseline) {
-    return result.baseline_vehicle_count == null
-      ? "no observed baseline"
-      : `observed baseline ${result.baseline_vehicle_count}`;
-  }
-  if (baseline.status === "live") {
-    const frames = baseline.sample_size === 1 ? "frame" : "frames";
-    return `recent camera average ${baseline.vehicle_count} vehicles/frame (${baseline.sample_size} ${frames})`;
-  }
-  if (baseline.status === "stale") {
-    return `last observed ${baseline.vehicle_count} vehicles/frame, ${baseline.age_minutes} min old`;
-  }
-  return "no camera observations recorded yet";
-}
-
-function getDetectionBox(detection) {
-  if (!Array.isArray(detection?.box) || detection.box.length !== 4) return null;
-  const box = detection.box.map(Number);
-  return box.every(Number.isFinite) ? box : null;
-}
-
-function formatDetectionCount(kind, count) {
-  const numericCount = Number(count);
-  if (kind === "garbage") {
-    return `${numericCount} garbage ${numericCount === 1 ? "item" : "items"}`;
-  }
-  return `${numericCount} ${kind}${numericCount === 1 ? "" : "s"}`;
-}
+import {
+  describeBaseline,
+  formatDetectionCount,
+  getDetectionBox,
+} from "./lib/formatters";
+import "./styles/app.css";
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
   const controller = new AbortController();
@@ -476,19 +359,6 @@ useEffect(() => {
     return trafficStatus === "offline" ? "Feed offline" : "Connecting…";
   };
 
-  const menuItems = [
-  { name: "Dashboard", icon: "📊" },
-  { name: "Live Fleet", icon: "🚌" },
-  { name: "AI Prediction", icon: "🤖" },
-  { name: "Pothole Detection", icon: "🕳️" },
-  { name: "Camera", icon: "📷" },
-  { name: "Routes", icon: "🗺️" },
-  { name: "Alerts", icon: "🔔" },
-  { name: "Fitness & Sports", icon: "🏃" },
-  { name: "Road Safety Lab", icon: "🛡️" },
-  { name: "Traffic Simulator", icon: "🚦" },
-];
-
  const buses = fleetBuses;
   const routes = routeData?.routes ?? [];
   const visibleDetections = liveDetections.filter(
@@ -783,96 +653,16 @@ useEffect(() => {
 
       <div className="app">
 
-      {/* SIDEBAR */}
-      <aside className="sidebar">
-
-        <div className="brand">
-          <div className="brand-icon">⌁</div>
-
-          <div>
-            <h2>URBAN<span>IQ</span></h2>
-            <small>City Intelligence OS</small>
-          </div>
-        </div>
-
-        <nav>
-          {menuItems.map((item) => (
-            <button
-              key={item.name}
-              className={
-                activePage === item.name
-                  ? "nav-item active"
-                  : "nav-item"
-              }
-              onClick={() => navigateToPage(item.name)}
-            >
-              <span>{item.icon}</span>
-              {item.name}
-
-              {/* ALERT COUNT */}
-              {item.name === "Alerts" && (
-                <small className="alert-count">
-                  {activeAlertCount}
-                </small>
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <a
-          className="sidebar-bottom"
-          href="/fleet-device.html"
-          aria-label="Open the UrbanIQ fleet device console"
-          title="Open fleet device console"
-        >
-          <div className="sih-mark">SIH</div>
-          <div>
-            <strong>SIH26124</strong>
-            <span>Fleet device console ↗</span>
-          </div>
-        </a>
-
-      </aside>
+      <AppSidebar
+        activePage={activePage}
+        activeAlertCount={activeAlertCount}
+        onNavigate={navigateToPage}
+      />
 
       {/* MAIN */}
       <main className="main">
 
-        {/* HEADER */}
-        <header className="topbar">
-
-          <div>
-            <span className="project-code">
-              SIH 2026 · PROBLEM 26124
-            </span>
-
-            <h1>
-              Hyderabad Urban Intelligence
-            </h1>
-
-            <p>AI-powered command centre for safer, faster, cleaner cities</p>
-          </div>
-
-          <div className="status-cluster">
-            <div
-              className={`system-status ${
-                overview?.status === "operational"
-                  ? "is-operational"
-                  : overview
-                    ? "is-degraded"
-                    : "is-checking"
-              }`}
-            >
-              <span className="status-dot"></span>
-              {overview?.status === "operational"
-                ? "All systems operational"
-                : overview
-                  ? "Service degradation detected"
-                  : "Checking system status"}
-            </div>
-            <span className="command-location">📍 Hyderabad, IN</span>
-          </div>
-
-        </header>
+        <AppHeader overview={overview} />
 
      {/* ================= DASHBOARD ================= */}
 
@@ -2430,106 +2220,7 @@ useEffect(() => {
   </>
 )}
 
-        {activePage === "Road Safety Lab" && (
-          <>
-            <div className="page-heading">
-              <div>
-                <span className="eyebrow">FEATURE PREVIEW • IN DEVELOPMENT</span>
-                <h2 className="page-title">Road Safety Lab</h2>
-                <p>
-                  Edge-assisted enforcement for speeding vehicles and
-                  low-quality roadside footage.
-                </p>
-              </div>
-              <span className="development-chip">PLANNED</span>
-            </div>
-
-            <section className="safety-hero">
-              <div>
-                <span className="safety-kicker">NEXT-GENERATION ROAD SAFETY</span>
-                <h2>From a speeding event to actionable evidence.</h2>
-                <p>
-                  UrbanIQ will combine speed telemetry, number-plate detection
-                  and edge image restoration to produce a reviewable violation
-                  package before any alert is issued.
-                </p>
-              </div>
-              <div className="safety-orbit" aria-hidden="true">
-                <span>⚡</span>
-                <strong>EDGE AI</strong>
-                <small>PROCESSING</small>
-              </div>
-            </section>
-
-            <div className="safety-feature-grid">
-              <section className="section-card safety-feature-card">
-                <div className="feature-number">01</div>
-                <span className="feature-icon">🏎️</span>
-                <h2>Rash Driving & Speed Enforcement</h2>
-                <p>
-                  Detect a speed-limit violation, capture the best frame,
-                  isolate the licence plate and prepare a verified alert.
-                </p>
-                <div className="pipeline-list">
-                  <div><span>1</span><p><strong>Detect</strong> Compare measured speed with the road limit.</p></div>
-                  <div><span>2</span><p><strong>Capture</strong> Select the clearest frame around the event.</p></div>
-                  <div><span>3</span><p><strong>Read</strong> Localise the plate and run OCR with confidence scoring.</p></div>
-                  <div><span>4</span><p><strong>Review</strong> Human verification before an alert is sent.</p></div>
-                </div>
-                <span className="feature-status">MODEL + WORKFLOW IN DEVELOPMENT</span>
-              </section>
-
-              <section className="section-card safety-feature-card">
-                <div className="feature-number">02</div>
-                <span className="feature-icon">✨</span>
-                <h2>Edge Image Restoration</h2>
-                <p>
-                  Improve difficult camera frames on-device before detection,
-                  while retaining the original image as evidence.
-                </p>
-                <div className="enhancement-preview">
-                  <div className="preview-frame preview-before">
-                    <span>RAW FRAME</span>
-                    <strong>TS •• 7B ••••</strong>
-                    <small>motion blur · low contrast</small>
-                  </div>
-                  <div className="preview-arrow">→</div>
-                  <div className="preview-frame preview-after">
-                    <span>RESTORED</span>
-                    <strong>TS 09 EB 4821</strong>
-                    <small>sharpened · contrast recovered</small>
-                  </div>
-                </div>
-                <div className="enhancement-tags">
-                  <span>Deblur</span>
-                  <span>Denoise</span>
-                  <span>Low-light recovery</span>
-                  <span>Super-resolution</span>
-                </div>
-                <small className="evidence-note">
-                  Restoration assists review; it does not guarantee recovery
-                  of details that were never captured.
-                </small>
-              </section>
-            </div>
-
-            <section className="section-card delivery-roadmap">
-              <div className="section-header">
-                <div>
-                  <h2>Delivery Roadmap</h2>
-                  <p>Planned safeguards before real-world enforcement.</p>
-                </div>
-                <span className="development-chip">R&amp;D</span>
-              </div>
-              <div className="roadmap-steps">
-                <div className="roadmap-step active"><span>1</span><strong>Prototype</strong><small>Speed + plate pipeline</small></div>
-                <div className="roadmap-step"><span>2</span><strong>Edge validation</strong><small>Night, rain and motion tests</small></div>
-                <div className="roadmap-step"><span>3</span><strong>Human review</strong><small>Confidence and evidence checks</small></div>
-                <div className="roadmap-step"><span>4</span><strong>Pilot</strong><small>Authority-approved deployment</small></div>
-              </div>
-            </section>
-          </>
-        )}
+        {activePage === "Road Safety Lab" && <RoadSafetyPage />}
 
         {/* FOOTER */}
 

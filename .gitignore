@@ -29,8 +29,6 @@ Dockerfile
 render.yaml
 api/
 
-# Detection artifacts
-*.jpg
-*.jpeg
-*.png
-*.webp
+# Local screenshots and detection output belong outside src/public.
+runs/
+screenshots/

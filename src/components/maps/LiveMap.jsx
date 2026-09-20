@@ -28,7 +28,10 @@ function MapViewport({ positions }) {
   return null;
 }
 
-function LiveMap({ buses = [], telemetryStatus = "loading" }) {
+export default function LiveMap({
+  buses = [],
+  telemetryStatus = "loading",
+}) {
   const busesWithLocation = buses
     .map((bus) => ({
       ...bus,
@@ -128,5 +131,3 @@ function LiveMap({ buses = [], telemetryStatus = "loading" }) {
     </div>
   );
 }
-
-export default LiveMap;

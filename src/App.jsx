@@ -138,6 +138,14 @@ function getDetectionBox(detection) {
   return box.every(Number.isFinite) ? box : null;
 }
 
+function formatDetectionCount(kind, count) {
+  const numericCount = Number(count);
+  if (kind === "garbage") {
+    return `${numericCount} garbage ${numericCount === 1 ? "item" : "items"}`;
+  }
+  return `${numericCount} ${kind}${numericCount === 1 ? "" : "s"}`;
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort();
@@ -2361,9 +2369,7 @@ useEffect(() => {
 
                 <div>
                   <h3>
-                    {`${detection.count} ${detection.kind}${
-                      Number(detection.count) === 1 ? "" : "s"
-                    }`}
+                    {formatDetectionCount(detection.kind, detection.count)}
                   </h3>
                   <p>
                     {detection.confidence

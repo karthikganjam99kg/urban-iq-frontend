@@ -143,6 +143,7 @@ const [cameraResult, setCameraResult] = useState(null);
 const [isCameraScanning, setIsCameraScanning] = useState(false);
 const videoRef = useRef(null);
 const streamRef = useRef(null);
+const cameraSessionRef = useRef(0);
 const [imageDimensions, setImageDimensions] = useState({
   width: 1,
   height: 1
@@ -150,6 +151,8 @@ const [imageDimensions, setImageDimensions] = useState({
 const [trafficData, setTrafficData] = useState(null);
 const [trafficStatus, setTrafficStatus] = useState("loading");
 const [alerts, setAlerts] = useState([]);
+const [detectionToast, setDetectionToast] = useState(null);
+const detectionToastTimerRef = useRef(null);
 const [vehicleCount, setVehicleCount] = useState(null);
 const [simulatedVehicles, setSimulatedVehicles] = useState(50);
 const [simulationResult, setSimulationResult] = useState(null);
@@ -185,6 +188,15 @@ useEffect(() => {
     clearTimeout(maximumTimer);
   };
 }, []);
+
+useEffect(
+  () => () => {
+    if (detectionToastTimerRef.current) {
+      clearTimeout(detectionToastTimerRef.current);
+    }
+  },
+  [],
+);
 
 useEffect(() => {
   const allSettled = BOOT_CHECK_NAMES.every(
@@ -377,16 +389,6 @@ useEffect(() => {
       clearInterval(historyInterval);
     };
   }, []);
-  // Leaving the page or unmounting must switch the camera light off.
-  useEffect(() => {
-    if (activePage === "Camera") return;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-      setCameraStream(null);
-    }
-  }, [activePage]);
-
   useEffect(
     () => () => {
       if (streamRef.current) {
@@ -464,8 +466,14 @@ useEffect(() => {
     bus.telemetry_status === "live" &&
     String(bus.operational_status).toUpperCase().includes("DELAY"),
   );
+  const persistedActiveAlertCount = alerts.filter(
+    (alert) =>
+      !["resolved", "closed", "dismissed"].includes(
+        String(alert.status || "new").toLowerCase(),
+      ),
+  ).length;
   const activeAlertCount =
-    (overview?.active_alerts ?? alerts.length) +
+    Math.max(overview?.active_alerts ?? 0, persistedActiveAlertCount) +
     highDemandBuses.length +
     delayedBuses.length;
 
@@ -495,9 +503,33 @@ useEffect(() => {
   };
 
   const closeCamera = () => {
+    cameraSessionRef.current += 1;
     releaseCamera();
     setCameraStream(null);
     setIsCameraScanning(false);
+  };
+
+  const navigateToPage = (nextPage) => {
+    if (activePage === "Camera" && nextPage !== "Camera") {
+      cameraSessionRef.current += 1;
+      releaseCamera();
+      setCameraStream(null);
+      setCameraError("");
+      setCameraResult(null);
+      setIsCameraScanning(false);
+    }
+    setActivePage(nextPage);
+  };
+
+  const showDetectionToast = ({ potholes, garbage }) => {
+    if (detectionToastTimerRef.current) {
+      clearTimeout(detectionToastTimerRef.current);
+    }
+    setDetectionToast({ potholes, garbage });
+    detectionToastTimerRef.current = setTimeout(
+      () => setDetectionToast(null),
+      7000,
+    );
   };
 
   const captureAndDetect = async () => {
@@ -509,6 +541,7 @@ useEffect(() => {
 
     setIsCameraScanning(true);
     setCameraError("");
+    const sessionId = cameraSessionRef.current;
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -538,6 +571,9 @@ useEffect(() => {
         item.status === "fulfilled" ? item.value : null,
       );
 
+      // Ignore a response that arrives after Close or page navigation.
+      if (cameraSessionRef.current !== sessionId) return;
+
       if (!vehicleData && !potholeData && !garbageData) {
         setCameraResult(null);
         setCameraError(
@@ -556,11 +592,28 @@ useEffect(() => {
       if (potholeData) logDetection("pothole", potholes);
       if (garbageData) logDetection("garbage", garbage);
 
-      // Potholes and garbage raise civic alerts server-side, so pull the feed.
-      if (potholes.length > 0 || garbage.length > 0) {
-        fetchAlertsData()
-          .then((data) => setAlerts(Array.isArray(data) ? data : []))
-          .catch(() => {});
+      const savedPotholes =
+        potholes.length > 0 && potholeData?.alert_created === true
+          ? potholes.length
+          : 0;
+      const savedGarbage =
+        garbage.length > 0 && garbageData?.alert_created === true
+          ? garbage.length
+          : 0;
+
+      // Confirm the persisted feed before showing a toast or changing count.
+      if (savedPotholes > 0 || savedGarbage > 0) {
+        try {
+          const latestAlerts = await fetchAlertsData();
+          if (cameraSessionRef.current !== sessionId) return;
+          setAlerts(Array.isArray(latestAlerts) ? latestAlerts : []);
+          showDetectionToast({
+            potholes: savedPotholes,
+            garbage: savedGarbage,
+          });
+        } catch (error) {
+          console.error("Post-detection alert refresh failed:", error);
+        }
       }
 
       setCameraResult({
@@ -575,6 +628,7 @@ useEffect(() => {
         roadRisk: potholeData?.road_risk ?? null,
       });
     } catch (error) {
+      if (cameraSessionRef.current !== sessionId) return;
       console.error("Camera detection error:", error);
       setCameraResult(null);
       setCameraError("Could not reach the AI service. Capture again once it is live.");
@@ -618,6 +672,47 @@ useEffect(() => {
       {showSplash && (
         <BootSplash checks={bootChecks} leaving={splashLeaving} />
       )}
+
+      {detectionToast && (
+        <aside
+          className="detection-toast"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div className="detection-toast-icon">!</div>
+          <div className="detection-toast-copy">
+            <span className="eyebrow">CIVIC ALERT CREATED</span>
+            <strong>Road issue detected</strong>
+            <p>
+              {[
+                detectionToast.potholes > 0
+                  ? `${detectionToast.potholes} ${
+                      detectionToast.potholes === 1 ? "pothole" : "potholes"
+                    }`
+                  : null,
+                detectionToast.garbage > 0
+                  ? `${detectionToast.garbage} garbage ${
+                      detectionToast.garbage === 1 ? "item" : "items"
+                    }`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            <button onClick={() => navigateToPage("Alerts")}>
+              View alerts →
+            </button>
+          </div>
+          <button
+            className="detection-toast-close"
+            aria-label="Dismiss detection alert"
+            onClick={() => setDetectionToast(null)}
+          >
+            ×
+          </button>
+        </aside>
+      )}
+
       <div className="app">
 
       {/* SIDEBAR */}
@@ -641,7 +736,7 @@ useEffect(() => {
                   ? "nav-item active"
                   : "nav-item"
               }
-              onClick={() => setActivePage(item.name)}
+              onClick={() => navigateToPage(item.name)}
             >
               <span>{item.icon}</span>
               {item.name}
@@ -910,7 +1005,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
         <button
           onClick={() =>
-            setActivePage("Live Fleet")
+            navigateToPage("Live Fleet")
           }
         >
           View All

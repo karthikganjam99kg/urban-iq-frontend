@@ -451,6 +451,7 @@ useEffect(() => {
   };
 
   const logDetection = (kind, items = []) => {
+    if (items.length === 0) return;
     recordDetection({
       kind,
       count: items.length,
@@ -482,6 +483,9 @@ useEffect(() => {
 
  const buses = fleetBuses;
   const routes = routeData?.routes ?? [];
+  const visibleDetections = liveDetections.filter(
+    (detection) => Number(detection.count) > 0,
+  );
   const demandRoutes = Array.isArray(demandForecast?.routes)
     ? demandForecast.routes
     : [];
@@ -2336,7 +2340,7 @@ useEffect(() => {
 
         <div className="route-list">
 
-          {liveDetections.length === 0 ? (
+          {visibleDetections.length === 0 ? (
             <div className="route-card">
               <div className="route-icon">🤖</div>
               <div>
@@ -2345,7 +2349,7 @@ useEffect(() => {
               </div>
             </div>
           ) : (
-            liveDetections.map((detection) => (
+            visibleDetections.map((detection) => (
               <div className="route-card" key={detection.id}>
                 <div className="route-icon">
                   {detection.kind === "pothole"
@@ -2357,8 +2361,9 @@ useEffect(() => {
 
                 <div>
                   <h3>
-                    {detection.count} {detection.kind}
-                    {detection.count === 1 ? "" : "s"}
+                    {`${detection.count} ${detection.kind}${
+                      Number(detection.count) === 1 ? "" : "s"
+                    }`}
                   </h3>
                   <p>
                     {detection.confidence

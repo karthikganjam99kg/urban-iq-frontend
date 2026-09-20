@@ -858,7 +858,7 @@ useEffect(() => {
       {demandStatus === "live" && demandForecast ? (
         <div className="prediction-box">
           <span>Next-hour people signal</span>
-          <h1>{demandForecast.predicted_people} people</h1>
+          <h1>👤 {demandForecast.predicted_people} people</h1>
           <strong>{demandForecast.demand_level}</strong>
           <div className="recommendation">
             <b>Model recommendation</b>
@@ -1467,7 +1467,7 @@ useEffect(() => {
                 <>
                   <div className="prediction-box">
                     <span>Predicted people signal for the next hour</span>
-                    <h1>{demandForecast.predicted_people} people</h1>
+                    <h1>👤 {demandForecast.predicted_people} people</h1>
                     <p>Demand Level</p>
                     <strong className={demandForecast.demand_level === "HIGH" ? "demand-high" : ""}>
                       {demandForecast.demand_level}
@@ -1522,7 +1522,7 @@ useEffect(() => {
                     <span>{route.route_id} · {route.bus_id}</span>
                     <strong>
                       {route.status === "live"
-                        ? `${route.predicted_people} people · ${route.demand_level}`
+                        ? `👤 ${route.predicted_people} people · ${route.demand_level}`
                         : `${route.observations} samples`}
                     </strong>
                   </div>
@@ -1838,7 +1838,7 @@ useEffect(() => {
                     <h3>High Passenger Demand</h3>
                     <p>
                       {bus.id} on <strong>{bus.route_name}</strong> is forecast at{" "}
-                      {bus.demand.predicted_people} people next hour (
+                      👤 {bus.demand.predicted_people} people next hour (
                       {bus.demand.demand_level}).
                     </p>
                     <small>

@@ -829,7 +829,8 @@ nav {
 }
 
 .demand-route strong {
-  color: #dc2626;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ================= PEAK WARNING ================= */

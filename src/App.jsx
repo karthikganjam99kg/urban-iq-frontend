@@ -1290,6 +1290,22 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             setRoadRisk(data.road_risk ?? null);
             logDetection("pothole", data.detections || []);
 
+            const savedPotholeCount =
+              (data.detections || []).length > 0 && data.alert_created === true
+                ? data.detections.length
+                : 0;
+
+            // The backend confirms the civic alert write before we surface it.
+            if (savedPotholeCount > 0) {
+              try {
+                const latestAlerts = await fetchAlertsData();
+                setAlerts(Array.isArray(latestAlerts) ? latestAlerts : []);
+                showDetectionToast({ potholes: savedPotholeCount, garbage: 0 });
+              } catch (refreshError) {
+                console.error("Post-upload alert refresh failed:", refreshError);
+              }
+            }
+
             const imageUrl = URL.createObjectURL(file);
 
             const img = new Image();

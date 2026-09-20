@@ -7,16 +7,28 @@ const API_BASE_URL = (
 
 export const apiUrl = (path) => `${API_BASE_URL}${path}`;
 
-export async function fetchApi(path, options) {
-  const response = await fetch(apiUrl(path), options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.error || `API returned ${response.status}`);
-    error.status = response.status;
-    error.data = data;
-    throw error;
+export async function fetchApi(path, options = {}) {
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(apiUrl(path), {
+      ...options,
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data.error || `API returned ${response.status}`);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
-  return data;
 }
 
 export const getOverview = () => fetchApi("/api/overview");

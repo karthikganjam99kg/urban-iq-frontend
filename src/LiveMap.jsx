@@ -1,11 +1,49 @@
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { useEffect } from "react";
+import L from "leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIcon2x,
+  shadowUrl: markerShadow,
+});
+
+function MapViewport({ positions }) {
+  const map = useMap();
+  const signature = positions.map((position) => position.join(",")).join("|");
+
+  useEffect(() => {
+    if (positions.length === 1) {
+      map.setView(positions[0], 13);
+    } else if (positions.length > 1) {
+      map.fitBounds(positions, { padding: [28, 28], maxZoom: 13 });
+    }
+  }, [map, signature, positions]);
+
+  return null;
+}
+
 function LiveMap({ buses = [], telemetryStatus = "loading" }) {
-  const busesWithLocation = buses.filter(
-    (bus) =>
-      typeof bus.latitude === "number" && typeof bus.longitude === "number"
-  );
+  const busesWithLocation = buses
+    .map((bus) => ({
+      ...bus,
+      latitude: Number(bus.latitude),
+      longitude: Number(bus.longitude),
+    }))
+    .filter(
+      (bus) =>
+        Number.isFinite(bus.latitude) &&
+        Number.isFinite(bus.longitude) &&
+        bus.latitude >= 16.5 &&
+        bus.latitude <= 18.5 &&
+        bus.longitude >= 77.5 &&
+        bus.longitude <= 79.5,
+    );
 
   if (busesWithLocation.length === 0) {
     return (
@@ -38,6 +76,12 @@ function LiveMap({ buses = [], telemetryStatus = "loading" }) {
           borderRadius: "15px",
         }}
       >
+        <MapViewport
+          positions={busesWithLocation.map((bus) => [
+            bus.latitude,
+            bus.longitude,
+          ])}
+        />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

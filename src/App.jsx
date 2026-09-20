@@ -49,7 +49,7 @@ function BootSplash({ checks, leaving }) {
     const states = names.map((name) => checks[name]);
     if (states.every((state) => state === "checking")) return "checking";
     if (states.some((state) => state === "checking")) return "checking";
-    if (states.every((state) => state === "offline")) return "offline";
+    if (states.some((state) => state === "offline")) return "offline";
     return "ready";
   };
 
@@ -95,7 +95,7 @@ function BootSplash({ checks, leaving }) {
                   {state === "checking"
                     ? "Checking"
                     : state === "offline"
-                      ? "Checked"
+                      ? "Offline"
                       : "Ready"}
                 </small>
               </div>
@@ -105,7 +105,9 @@ function BootSplash({ checks, leaving }) {
 
         <p className="boot-footnote">
           {completed === BOOT_CHECK_NAMES.length
-            ? "Command centre ready"
+            ? Object.values(checks).some((state) => state === "offline")
+              ? "Command centre ready with unavailable services"
+              : "Command centre ready"
             : `Running service checks · ${progress}%`}
         </p>
       </div>
@@ -130,6 +132,25 @@ function describeBaseline(result) {
   return "no camera observations recorded yet";
 }
 
+function getDetectionBox(detection) {
+  if (!Array.isArray(detection?.box) || detection.box.length !== 4) return null;
+  const box = detection.box.map(Number);
+  return box.every(Number.isFinite) ? box : null;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const abortFromCaller = () => controller.abort();
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
   const [detections, setDetections] = useState([]);
@@ -144,6 +165,7 @@ const [isCameraScanning, setIsCameraScanning] = useState(false);
 const videoRef = useRef(null);
 const streamRef = useRef(null);
 const cameraSessionRef = useRef(0);
+const cameraRequestRef = useRef(null);
 const [imageDimensions, setImageDimensions] = useState({
   width: 1,
   height: 1
@@ -196,6 +218,13 @@ useEffect(
     }
   },
   [],
+);
+
+useEffect(
+  () => () => {
+    if (selectedImage) URL.revokeObjectURL(selectedImage);
+  },
+  [selectedImage],
 );
 
 useEffect(() => {
@@ -251,7 +280,7 @@ useEffect(() => {
 
     const pingNeuralApi = async () => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
+      const timer = setTimeout(() => controller.abort(), 30000);
       try {
         const response = await fetch(apiUrl("/api/health"), {
           signal: controller.signal,
@@ -391,6 +420,7 @@ useEffect(() => {
   }, []);
   useEffect(
     () => () => {
+      cameraRequestRef.current?.abort();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -400,7 +430,8 @@ useEffect(() => {
   );
 
   const trafficIsLive = trafficStatus === "live" && trafficData !== null;
-  const potholeApiLive = neuralStatus === "live" && neuralModels.pothole !== false;
+  const potholeApiLive =
+    neuralStatus === "live" && neuralModels.pothole === true;
   const potholeChip =
     neuralStatus === "checking"
       ? "YOLO · CONNECTING"
@@ -451,12 +482,15 @@ useEffect(() => {
 
  const buses = fleetBuses;
   const routes = routeData?.routes ?? [];
+  const demandRoutes = Array.isArray(demandForecast?.routes)
+    ? demandForecast.routes
+    : [];
   const highDemandBuses =
     demandStatus === "live"
       ? buses
           .map((bus) => ({
             ...bus,
-            demand: demandForecast?.routes?.find(
+            demand: demandRoutes.find(
               (route) => route.bus_id === bus.id,
             ),
           }))
@@ -466,12 +500,13 @@ useEffect(() => {
     bus.telemetry_status === "live" &&
     String(bus.operational_status).toUpperCase().includes("DELAY"),
   );
-  const persistedActiveAlertCount = alerts.filter(
+  const persistedActiveAlerts = alerts.filter(
     (alert) =>
       !["resolved", "closed", "dismissed"].includes(
         String(alert.status || "new").toLowerCase(),
       ),
-  ).length;
+  );
+  const persistedActiveAlertCount = persistedActiveAlerts.length;
   const activeAlertCount =
     Math.max(overview?.active_alerts ?? 0, persistedActiveAlertCount) +
     highDemandBuses.length +
@@ -490,7 +525,9 @@ useEffect(() => {
   const openCamera = async () => {
     setCameraError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+      });
       releaseCamera();
       streamRef.current = stream;
       setCameraStream(stream);
@@ -504,6 +541,8 @@ useEffect(() => {
 
   const closeCamera = () => {
     cameraSessionRef.current += 1;
+    cameraRequestRef.current?.abort();
+    cameraRequestRef.current = null;
     releaseCamera();
     setCameraStream(null);
     setIsCameraScanning(false);
@@ -512,6 +551,8 @@ useEffect(() => {
   const navigateToPage = (nextPage) => {
     if (activePage === "Camera" && nextPage !== "Camera") {
       cameraSessionRef.current += 1;
+      cameraRequestRef.current?.abort();
+      cameraRequestRef.current = null;
       releaseCamera();
       setCameraStream(null);
       setCameraError("");
@@ -542,6 +583,8 @@ useEffect(() => {
     setIsCameraScanning(true);
     setCameraError("");
     const sessionId = cameraSessionRef.current;
+    const requestController = new AbortController();
+    cameraRequestRef.current = requestController;
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -553,11 +596,16 @@ useEffect(() => {
       const blob = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/jpeg"),
       );
+      if (!blob) throw new Error("The camera frame could not be encoded.");
 
       const post = async (path) => {
         const body = new FormData();
         body.append("image", blob, "camera.jpg");
-        const response = await fetch(apiUrl(path), { method: "POST", body });
+        const response = await fetchWithTimeout(apiUrl(path), {
+          method: "POST",
+          body,
+          signal: requestController.signal,
+        });
         if (!response.ok) throw new Error(`${path} returned ${response.status}`);
         return response.json();
       };
@@ -633,6 +681,9 @@ useEffect(() => {
       setCameraResult(null);
       setCameraError("Could not reach the AI service. Capture again once it is live.");
     } finally {
+      if (cameraRequestRef.current === requestController) {
+        cameraRequestRef.current = null;
+      }
       setIsCameraScanning(false);
     }
   };
@@ -656,15 +707,20 @@ useEffect(() => {
   const getStatusClass = (status) => {
     const normalized = String(status).toUpperCase();
     if (
-      ["STALE", "MISSING", "COLLECTING", "LOADING", "CHECKING"].includes(
+      ["STALE", "MISSING", "PARTIAL", "COLLECTING", "LOADING", "CHECKING"].includes(
         normalized,
       ) ||
       normalized.includes("DELAY")
     ) {
       return "badge yellow";
     }
-    if (normalized === "OFFLINE") return "badge red";
-    return "badge green";
+    if (["OFFLINE", "ERROR", "SCHEMA_REQUIRED"].includes(normalized)) {
+      return "badge red";
+    }
+    if (["LIVE", "ACTIVE", "OPERATIONAL", "READY"].includes(normalized)) {
+      return "badge green";
+    }
+    return "badge";
   };
 
   return (
@@ -785,7 +841,15 @@ useEffect(() => {
           </div>
 
           <div className="status-cluster">
-            <div className="system-status">
+            <div
+              className={`system-status ${
+                overview?.status === "operational"
+                  ? "is-operational"
+                  : overview
+                    ? "is-degraded"
+                    : "is-checking"
+              }`}
+            >
               <span className="status-dot"></span>
               {overview?.status === "operational"
                 ? "All systems operational"
@@ -862,7 +926,7 @@ useEffect(() => {
         <p>High Demand</p>
         <h2>
           {demandStatus === "live"
-            ? demandForecast.routes.filter((route) => route.demand_level === "HIGH").length
+            ? demandRoutes.filter((route) => route.demand_level === "HIGH").length
             : "—"}
         </h2>
       </div>
@@ -911,79 +975,6 @@ useEffect(() => {
             : "Loading traffic data..."}
         </p>
       )}
-{selectedImage && (
-  <div style={{ marginTop: "20px" }}>
-    <h3>AI Detection Result</h3>
-<div
-  style={{
-    position: "relative",
-    display: "inline-block",
-    maxWidth: "100%"
-  }}
->
-  <img
-    src={selectedImage}
-    alt="Pothole detection"
-    style={{
-      maxWidth: "100%",
-      display: "block",
-      borderRadius: "10px"
-    }}
-  />
-
-  {detections.map((detection, index) => {
-    const [x1, y1, x2, y2] = detection.box;
-
-    return (
-      <div
-        key={index}
-        style={{
-          position: "absolute",
-         left: `${(x1 / imageDimensions.width) * 100}%`,
-top: `${(y1 / imageDimensions.height) * 100}%`,
-width: `${((x2 - x1) / imageDimensions.width) * 100}%`,
-height: `${((y2 - y1) / imageDimensions.height) * 100}%`,
-          border: "5px solid red",
-backgroundColor: "rgba(255, 0, 0, 0.15)",
-          boxSizing: "border-box",
-          pointerEvents: "none"
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: "-25px",
-            left: "0",
-            background: "red",
-            color: "white",
-            padding: "3px 6px",
-            fontSize: "12px",
-            fontWeight: "bold",
-            borderRadius: "4px",
-            whiteSpace: "nowrap"
-          }}
-        >
-          Pothole {index + 1} — {detection.confidence}%
-        </span>
-      </div>
-    );
-  })}
-</div>
-    
-    
-
-    <h3 style={{ marginTop: "15px" }}>
-      Detected Potholes: {detections.length}
-    </h3>
-
-    {detections.map((detection, index) => (
-      <p key={index}>
-        🕳️ Pothole {index + 1} — Confidence:{" "}
-        {detection.confidence}%
-      </p>
-    ))}
-  </div>
-)}
 
     </section>
 
@@ -1256,7 +1247,9 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
           accept="image/*"
           disabled={isDetecting || !potholeApiLive}
           onChange={async (event) => {
-          const file = event.target.files?.[0];
+          const input = event.currentTarget;
+          const file = input.files?.[0];
+          input.value = "";
 
           if (!file) {
             return;
@@ -1266,9 +1259,12 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
           formData.append("image", file);
           setIsDetecting(true);
           setDetectionError("");
+          setSelectedImage(null);
+          setDetections([]);
+          setRoadRisk(null);
 
           try {
-            const response = await fetch(
+            const response = await fetchWithTimeout(
               apiUrl("/api/pothole-detect"),
               {
                 method: "POST",
@@ -1286,13 +1282,16 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
             console.log("Pothole detection result:", data);
 
-            setDetections(data.detections || []);
+            const nextDetections = Array.isArray(data.detections)
+              ? data.detections
+              : [];
+            setDetections(nextDetections);
             setRoadRisk(data.road_risk ?? null);
-            logDetection("pothole", data.detections || []);
+            logDetection("pothole", nextDetections);
 
             const savedPotholeCount =
-              (data.detections || []).length > 0 && data.alert_created === true
-                ? data.detections.length
+              nextDetections.length > 0 && data.alert_created === true
+                ? nextDetections.length
                 : 0;
 
             // The backend confirms the civic alert write before we surface it.
@@ -1315,10 +1314,14 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                 width: img.naturalWidth,
                 height: img.naturalHeight,
               });
+              setSelectedImage(imageUrl);
             };
 
+            img.onerror = () => {
+              URL.revokeObjectURL(imageUrl);
+              setDetectionError("The selected image could not be displayed.");
+            };
             img.src = imageUrl;
-            setSelectedImage(imageUrl);
 
           } catch (error) {
             console.error("Pothole detection error:", error);
@@ -1336,7 +1339,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
         <span className="upload-glyph">{isDetecting ? "◌" : "↑"}</span>
         <strong>{isDetecting ? "Running AI analysis…" : "Drop a road image here"}</strong>
         <span>{isDetecting ? "Locating road defects and calculating confidence" : "or click to browse from your device"}</span>
-        {!isDetecting && <small>SECURE ON-DEVICE UPLOAD · IMAGE DELETED AFTER ANALYSIS</small>}
+        {!isDetecting && <small>ENCRYPTED SERVER UPLOAD · TEMPORARY FILE DELETED AFTER ANALYSIS</small>}
       </label>
 
       {detectionError && (
@@ -1362,7 +1365,9 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             <div className="detection-canvas">
               <img src={selectedImage} alt="Analysed road" />
               {detections.map((detection, index) => {
-                const [x1, y1, x2, y2] = detection.box;
+                const box = getDetectionBox(detection);
+                if (!box) return null;
+                const [x1, y1, x2, y2] = box;
                 return (
                   <div
                     className="detection-box"
@@ -1513,12 +1518,27 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
           <div className="result-grid">
             <div className="detection-canvas">
               <img src={cameraResult.snapshot} alt="Captured frame" />
-              {(cameraResult.potholes ?? []).map((detection, index) => {
-                const [x1, y1, x2, y2] = detection.box;
+              {[
+                ...(cameraResult.potholes ?? []).map((detection) => ({
+                  ...detection,
+                  detectionKind: "Pothole",
+                })),
+                ...(cameraResult.garbage ?? []).map((detection) => ({
+                  ...detection,
+                  detectionKind: "Garbage",
+                })),
+              ].map((detection, index) => {
+                const box = getDetectionBox(detection);
+                if (!box) return null;
+                const [x1, y1, x2, y2] = box;
                 return (
                   <div
-                    className="detection-box"
-                    key={index}
+                    className={`detection-box ${
+                      detection.detectionKind === "Garbage"
+                        ? "is-garbage"
+                        : ""
+                    }`}
+                    key={`${detection.detectionKind}-${index}`}
                     style={{
                       left: `${(x1 / cameraResult.width) * 100}%`,
                       top: `${(y1 / cameraResult.height) * 100}%`,
@@ -1526,7 +1546,9 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                       height: `${((y2 - y1) / cameraResult.height) * 100}%`,
                     }}
                   >
-                    <span>#{index + 1} · {detection.confidence}%</span>
+                    <span>
+                      {detection.detectionKind} · {detection.confidence}%
+                    </span>
                   </div>
                 );
               })}
@@ -1619,12 +1641,12 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
               <div>
                 <span className="eyebrow">DATA MODEL · FLEET PLANNING</span>
                 <h2 className="page-title">AI Demand Prediction</h2>
-                <p>One-hour demand proxy trained from Supabase YOLO person-count history.</p>
+                <p>Rolling one-hour demand proxy fitted from Supabase YOLO person-count history.</p>
               </div>
               <span className={`model-chip ${
                 demandStatus === "live"
                   ? "is-live"
-                  : demandStatus === "loading"
+                  : ["loading", "collecting"].includes(demandStatus)
                     ? "is-checking"
                     : "is-offline"
               }`}>
@@ -1931,8 +1953,21 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                     <h3>{routeData.recommended.name}</h3>
                     <p>Route score: {routeData.recommended.score}/100</p>
                     <small>
-                      {routeData.recommended.pothole_count} potholes ·{" "}
-                      {routeData.recommended.waterlogging_count} waterlogging events
+                      Evidence:{" "}
+                      {(routeData.recommended.fresh_signals ?? []).join(", ") ||
+                        "not reported"}
+                    </small>
+                    <small>
+                      {[
+                        routeData.recommended.pothole_count != null
+                          ? `${routeData.recommended.pothole_count} potholes`
+                          : null,
+                        routeData.recommended.waterlogging_count != null
+                          ? `${routeData.recommended.waterlogging_count} waterlogging events`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "No recent hazard counts"}
                     </small>
                   </div>
                   <span className="badge green">RECOMMENDED</span>
@@ -1958,7 +1993,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                     .catch(() => setRouteData({ status: "offline", routes: [] }))
                 }
               >
-                Refresh Route Signals
+                Refresh Route Data
               </button>
 
             </section>
@@ -2025,7 +2060,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
                 </div>
               ))}
 
-              {alerts.length === 0 &&
+              {persistedActiveAlerts.length === 0 &&
                 highDemandBuses.length === 0 &&
                 delayedBuses.length === 0 && (
                   <div className="route-card">
@@ -2040,7 +2075,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
 {/* BACKEND AI ALERTS */}
 
-{alerts.map((alert) => (
+{persistedActiveAlerts.map((alert) => (
   <div
     className={`alert-card ${
       String(alert.severity).toUpperCase() === "HIGH"
@@ -2090,7 +2125,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
               >
 
                 <span className="alert-icon">
-                  🟢
+                  {overview?.status === "operational" ? "🟢" : "🟡"}
                 </span>
 
                 <div>
@@ -2109,9 +2144,9 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
 
                   <small>
                     {overview
-                      ? Object.entries(overview.services)
+                      ? Object.entries(overview.services ?? {})
                           .map(([name, status]) => `${name}: ${status}`)
-                          .join(" · ")
+                          .join(" · ") || "Service details unavailable"
                       : "Checking service freshness…"}
                   </small>
 
@@ -2191,10 +2226,14 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
             <div>
               <h3>No verified fitness routes configured</h3>
               <p>
-                Add verified routes in Supabase to enable live safety overlays.
+                {fitnessData?.status === "catalog_only"
+                  ? "The sports facility catalog is live; activity routes still need verified geometry."
+                  : "Add verified routes in Supabase to enable live safety overlays."}
               </p>
             </div>
-            <span className="badge">EMPTY</span>
+            <span className={getStatusClass(fitnessData?.status)}>
+              {fitnessData?.status === "catalog_only" ? "CATALOG ONLY" : "EMPTY"}
+            </span>
           </div>
         )}
 
@@ -2355,7 +2394,7 @@ backgroundColor: "rgba(255, 0, 0, 0.15)",
               <div>
                 <h3>{facility.name}</h3>
                 <p>
-                  {facility.activities.length
+                  {Array.isArray(facility.activities) && facility.activities.length
                     ? facility.activities.join(" & ")
                     : facility.facility_type}
                 </p>

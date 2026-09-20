@@ -385,6 +385,7 @@ button:focus-visible {
   bottom: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .brand {
@@ -1597,6 +1598,28 @@ nav {
   box-shadow: 0 0 0 4px rgba(22, 163, 106, 0.12);
 }
 
+.system-status.is-degraded {
+  color: #8a4b08;
+  background: #fff9eb;
+  border-color: #f2d49b;
+}
+
+.system-status.is-degraded .status-dot {
+  background: #e7a321;
+  box-shadow: 0 0 0 4px rgba(231, 163, 33, 0.14);
+}
+
+.system-status.is-checking {
+  color: #58697d;
+  background: #f5f8fc;
+  border-color: #dce5f0;
+}
+
+.system-status.is-checking .status-dot {
+  background: #8a9aad;
+  box-shadow: 0 0 0 4px rgba(138, 154, 173, 0.14);
+}
+
 .command-location {
   color: #7d8da2;
   font-size: 10px;
@@ -2123,6 +2146,15 @@ nav {
   box-shadow: 0 0 0 1px rgba(255,255,255,.3);
 }
 
+.detection-box.is-garbage {
+  border-color: #18a978;
+  background: rgba(24, 169, 120, 0.1);
+}
+
+.detection-box.is-garbage span {
+  background: #0d8b63;
+}
+
 .detection-box span {
   position: absolute;
   top: -22px;
@@ -2368,6 +2400,21 @@ footer {
   .brand small,
   .status-cluster,
   .sidebar-bottom {
+    display: none;
+  }
+
+  .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 11px 8px;
+    font-size: 0;
+  }
+
+  .nav-item > span {
+    font-size: 15px;
+  }
+
+  .nav-item .alert-count {
     display: none;
   }
 

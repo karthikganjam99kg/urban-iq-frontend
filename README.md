@@ -144,6 +144,14 @@ for bus in json.load(sys.stdin)["buses"]:
 
 Treat these links like passwords: anyone holding one can post telemetry.
 
+### Operator system check
+
+`/system-check.html` is an unlisted, no-index diagnostics page for presentation
+readiness. Its **Run live checks** button performs read-only requests against
+the health, overview, traffic, fleet, demand, routes, fitness, alerts,
+incidents and history endpoints, then shows service states and data quantities.
+It is intentionally absent from dashboard navigation and contains no secrets.
+
 ## 🌐 Deploy
 
 Every push to `main` ships to production via Vercel's Git integration.

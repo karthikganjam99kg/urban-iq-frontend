@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071426" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>UrbanIQ System Check</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+        color: #eaf4ff;
+        background: #071426;
+        font-synthesis: none;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 85% 5%, rgba(33, 149, 243, .18), transparent 26rem),
+          radial-gradient(circle at 15% 90%, rgba(16, 185, 129, .11), transparent 24rem),
+          linear-gradient(160deg, #071426, #0a1b31 60%, #071426);
+      }
+
+      button, a { font: inherit; }
+
+      .shell {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 34px 22px 52px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+        margin-bottom: 26px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 46px;
+        height: 46px;
+        place-items: center;
+        border-radius: 14px;
+        color: white;
+        font-size: 28px;
+        background: linear-gradient(135deg, #2d7ff9, #31d7e8);
+        box-shadow: 0 12px 34px rgba(45, 127, 249, .3);
+      }
+
+      .brand strong, .brand small { display: block; }
+      .brand strong { font-size: 18px; letter-spacing: .05em; }
+      .brand strong span { color: #31d7e8; }
+      .brand small {
+        margin-top: 2px;
+        color: #7892ad;
+        font-size: 10px;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+      }
+
+      .return-link {
+        color: #9bb4cd;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .return-link:hover { color: #eaf4ff; }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(24px, 5vw, 42px);
+        border: 1px solid rgba(105, 166, 230, .16);
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at 88% 20%, rgba(49, 215, 232, .18), transparent 18rem),
+          linear-gradient(135deg, #102d55, #173b6d);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+      }
+
+      .eyebrow {
+        color: #56dfed;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .16em;
+      }
+
+      h1 {
+        max-width: 720px;
+        margin: 9px 0 10px;
+        font-size: clamp(32px, 6vw, 56px);
+        line-height: 1.02;
+        letter-spacing: -.04em;
+      }
+
+      .hero p {
+        max-width: 700px;
+        margin: 0;
+        color: #b6cae0;
+        line-height: 1.65;
+      }
+
+      .hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+      }
+
+      .run-button {
+        min-width: 180px;
+        border: 0;
+        border-radius: 12px;
+        padding: 13px 18px;
+        color: white;
+        cursor: pointer;
+        font-weight: 800;
+        background: linear-gradient(135deg, #2d7ff9, #2099ef);
+        box-shadow: 0 12px 30px rgba(45, 127, 249, .32);
+        transition: transform .18s ease, filter .18s ease;
+      }
+      .run-button:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+      .run-button:disabled { cursor: wait; opacity: .65; }
+
+      .last-run { color: #91a8c0; font-size: 12px; }
+
+      .overall {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        width: fit-content;
+        margin: 20px 0;
+        padding: 9px 13px;
+        border: 1px solid #294661;
+        border-radius: 999px;
+        color: #a6bbcf;
+        background: rgba(9, 27, 48, .82);
+        font-size: 12px;
+        font-weight: 750;
+      }
+      .overall-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #7890a8;
+      }
+      .overall.live { color: #9de8c8; border-color: rgba(34, 197, 94, .35); }
+      .overall.live .overall-dot { background: #22c55e; box-shadow: 0 0 12px #22c55e; }
+      .overall.degraded { color: #f4cc81; border-color: rgba(245, 158, 11, .35); }
+      .overall.degraded .overall-dot { background: #f59e0b; }
+      .overall.offline { color: #fca5a5; border-color: rgba(239, 68, 68, .35); }
+      .overall.offline .overall-dot { background: #ef4444; }
+
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 16px;
+        margin: 30px 2px 14px;
+      }
+      .section-title h2 { margin: 0; font-size: 20px; }
+      .section-title p { margin: 4px 0 0; color: #7892ad; font-size: 13px; }
+
+      .quantity-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        padding: 18px;
+        border: 1px solid rgba(101, 146, 190, .16);
+        border-radius: 16px;
+        background: rgba(10, 29, 51, .82);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, .12);
+      }
+      .metric small {
+        display: block;
+        min-height: 34px;
+        color: #819bb4;
+        font-size: 11px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+      }
+      .metric strong {
+        display: block;
+        margin-top: 7px;
+        font-size: 30px;
+        line-height: 1;
+      }
+      .metric span {
+        display: block;
+        margin-top: 9px;
+        color: #7892ad;
+        font-size: 11px;
+      }
+
+      .checks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .check-card {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 13px;
+        padding: 16px;
+        border: 1px solid rgba(101, 146, 190, .16);
+        border-radius: 16px;
+        background: rgba(10, 29, 51, .82);
+      }
+      .check-icon {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        border-radius: 11px;
+        background: #112d4c;
+      }
+      .check-copy strong, .check-copy small { display: block; }
+      .check-copy strong { font-size: 14px; }
+      .check-copy small {
+        margin-top: 3px;
+        color: #7892ad;
+        line-height: 1.35;
+      }
+      .check-state {
+        padding: 5px 9px;
+        border-radius: 999px;
+        color: #9aafc4;
+        background: #132a43;
+        font-size: 10px;
+        font-weight: 850;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+      .check-card.live .check-state,
+      .check-card.ok .check-state,
+      .check-card.operational .check-state {
+        color: #7ee2b8;
+        background: rgba(16, 185, 129, .13);
+      }
+      .check-card.degraded .check-state,
+      .check-card.stale .check-state,
+      .check-card.collecting .check-state,
+      .check-card.catalog_only .check-state {
+        color: #f2c66f;
+        background: rgba(245, 158, 11, .13);
+      }
+      .check-card.offline .check-state,
+      .check-card.error .check-state {
+        color: #fca5a5;
+        background: rgba(239, 68, 68, .13);
+      }
+
+      .note {
+        margin-top: 22px;
+        padding: 14px 16px;
+        border-left: 3px solid #2d7ff9;
+        border-radius: 0 10px 10px 0;
+        color: #829ab2;
+        background: rgba(10, 29, 51, .55);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      footer {
+        margin-top: 28px;
+        color: #647d96;
+        text-align: center;
+        font-size: 11px;
+      }
+
+      @media (max-width: 850px) {
+        .quantity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+
+      @media (max-width: 620px) {
+        .shell { padding: 20px 14px 36px; }
+        .topbar { align-items: center; }
+        .brand small { display: none; }
+        .checks { grid-template-columns: 1fr; }
+        .hero-actions { align-items: stretch; flex-direction: column; }
+        .run-button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">⌁</div>
+          <div>
+            <strong>URBAN<span>IQ</span></strong>
+            <small>Unlisted system diagnostics</small>
+          </div>
+        </div>
+        <a class="return-link" href="/">Dashboard ↗</a>
+      </header>
+
+      <section class="hero">
+        <span class="eyebrow">LIVE DATA · SERVICE READINESS</span>
+        <h1>System intelligence check</h1>
+        <p>
+          Run every read-only operational check, inspect data quantities and
+          confirm which live signals are ready before a presentation.
+        </p>
+        <div class="hero-actions">
+          <button id="runChecks" class="run-button" type="button">
+            Run live checks
+          </button>
+          <span id="lastRun" class="last-run">Not checked yet</span>
+        </div>
+      </section>
+
+      <div id="overall" class="overall">
+        <span class="overall-dot" aria-hidden="true"></span>
+        <span id="overallText">Waiting for checks</span>
+      </div>
+
+      <section>
+        <div class="section-title">
+          <div>
+            <h2>Data quantity</h2>
+            <p>Current record and freshness totals returned by the API.</p>
+          </div>
+        </div>
+        <div id="quantityGrid" class="quantity-grid" aria-live="polite"></div>
+      </section>
+
+      <section>
+        <div class="section-title">
+          <div>
+            <h2>Live checks</h2>
+            <p>Endpoint health, response state and useful context.</p>
+          </div>
+        </div>
+        <div id="checks" class="checks" aria-live="polite"></div>
+      </section>
+
+      <p class="note">
+        This page performs GET requests only and never reads browser or backend
+        secrets. “Operational” requires live fleet telemetry, live TomTom data
+        and ready core vision models. Demand and route signals can still be
+        collecting without changing that badge.
+      </p>
+
+      <footer>SIH26124 · UrbanIQ operator diagnostics · Unlisted and no-index</footer>
+    </main>
+
+    <script>
+      const API_BASE =
+        location.hostname === "localhost" || location.hostname === "127.0.0.1"
+          ? ""
+          : "https://priyaredddy-cse-hyderabad-urban-intelligence-api.hf.space";
+
+      const ENDPOINTS = [
+        { id: "health", label: "AI engines", icon: "◉", path: "/api/health" },
+        { id: "overview", label: "Operations overview", icon: "⌁", path: "/api/overview" },
+        { id: "traffic", label: "TomTom traffic", icon: "◈", path: "/api/traffic" },
+        { id: "fleet", label: "Fleet telemetry", icon: "▣", path: "/api/fleet" },
+        { id: "demand", label: "Demand model", icon: "◆", path: "/api/demand-forecast" },
+        { id: "routes", label: "Route intelligence", icon: "⌖", path: "/api/routes" },
+        { id: "fitness", label: "Fitness catalog", icon: "◇", path: "/api/fitness" },
+        { id: "alerts", label: "Civic alerts", icon: "!", path: "/api/alerts" },
+        { id: "incidents", label: "Incidents", icon: "△", path: "/api/incidents" },
+        { id: "history", label: "Traffic history", icon: "≋", path: "/api/traffic-history" },
+      ];
+
+      const elements = {
+        button: document.querySelector("#runChecks"),
+        lastRun: document.querySelector("#lastRun"),
+        overall: document.querySelector("#overall"),
+        overallText: document.querySelector("#overallText"),
+        quantityGrid: document.querySelector("#quantityGrid"),
+        checks: document.querySelector("#checks"),
+      };
+
+      const safeArray = (value) => Array.isArray(value) ? value : [];
+      const displayStatus = (value) =>
+        String(value || "available").replaceAll("_", " ");
+
+      async function fetchJson(path) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30000);
+        const startedAt = performance.now();
+        try {
+          const response = await fetch(`${API_BASE}${path}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+          }
+          return {
+            data,
+            latency: Math.round(performance.now() - startedAt),
+          };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      function deriveStatus(id, data) {
+        if (id === "traffic") return data.error ? "offline" : "live";
+        if (id === "alerts" || id === "incidents" || id === "history") {
+          return Array.isArray(data) ? "live" : "error";
+        }
+        return String(data.status || "live").toLowerCase();
+      }
+
+      function describeCheck(id, data, latency) {
+        if (id === "health") {
+          const ready = Object.values(data.models || {}).filter(Boolean).length;
+          return `${ready}/${Object.keys(data.models || {}).length} models ready · ${latency} ms`;
+        }
+        if (id === "overview") {
+          return Object.entries(data.services || {})
+            .map(([name, status]) => `${name}: ${status}`)
+            .join(" · ") || `${latency} ms`;
+        }
+        if (id === "traffic") {
+          return `${data.congestion_level || "Unknown"} congestion · ${data.current_speed ?? "—"} km/h · ${latency} ms`;
+        }
+        if (id === "fleet") {
+          const summary = data.summary || {};
+          return `${summary.live || 0} live · ${summary.stale || 0} stale · ${summary.missing || 0} missing`;
+        }
+        if (id === "demand") {
+          const quality = data.data_quality || {};
+          return `${quality.minute_buckets || 0} minute buckets · ${quality.buses_observed || 0} buses`;
+        }
+        if (id === "routes") {
+          return `${safeArray(data.routes).length} routes · ${data.recommended ? "recommendation ready" : "still collecting"}`;
+        }
+        if (id === "fitness") {
+          return `${safeArray(data.routes).length} routes · ${safeArray(data.facilities).length} facilities`;
+        }
+        return `${safeArray(data).length} records · ${latency} ms`;
+      }
+
+      function quantityMetrics(results) {
+        const get = (id) => results.get(id)?.data || {};
+        const fleet = get("fleet");
+        const demand = get("demand");
+        return [
+          ["Configured buses", fleet.summary?.total ?? safeArray(fleet.buses).length, `${fleet.summary?.live || 0} currently live`],
+          ["Active alerts", get("overview").active_alerts ?? safeArray(get("alerts")).length, `${safeArray(get("alerts")).length} rows returned`],
+          ["Incidents", safeArray(get("incidents")).length, "Supabase incident records"],
+          ["Traffic snapshots", safeArray(get("history")).length, "Recent history rows returned"],
+          ["Demand frames", demand.data_quality?.raw_frames ?? 0, `${demand.data_quality?.minute_buckets || 0} minute buckets`],
+          ["Fleet routes", safeArray(get("routes").routes).length, get("routes").recommended ? "Recommendation ready" : "No recommendation yet"],
+          ["Fitness routes", safeArray(get("fitness").routes).length, `${safeArray(get("fitness").facilities).length} facilities`],
+          ["AI models ready", Object.values(get("health").models || {}).filter(Boolean).length, `${Object.keys(get("health").models || {}).length} registered`],
+        ];
+      }
+
+      function renderMetrics(results) {
+        elements.quantityGrid.replaceChildren(
+          ...quantityMetrics(results).map(([label, value, detail]) => {
+            const card = document.createElement("article");
+            card.className = "metric";
+            const small = document.createElement("small");
+            small.textContent = label;
+            const strong = document.createElement("strong");
+            strong.textContent = value;
+            const span = document.createElement("span");
+            span.textContent = detail;
+            card.append(small, strong, span);
+            return card;
+          }),
+        );
+      }
+
+      function renderChecks(results) {
+        elements.checks.replaceChildren(
+          ...ENDPOINTS.map((endpoint) => {
+            const result = results.get(endpoint.id);
+            const status = result?.error
+              ? "offline"
+              : deriveStatus(endpoint.id, result?.data || {});
+            const card = document.createElement("article");
+            card.className = `check-card ${status}`;
+
+            const icon = document.createElement("span");
+            icon.className = "check-icon";
+            icon.setAttribute("aria-hidden", "true");
+            icon.textContent = endpoint.icon;
+
+            const copy = document.createElement("div");
+            copy.className = "check-copy";
+            const title = document.createElement("strong");
+            title.textContent = endpoint.label;
+            const detail = document.createElement("small");
+            detail.textContent = result?.error
+              ? result.error
+              : describeCheck(endpoint.id, result?.data || {}, result?.latency || 0);
+            copy.append(title, detail);
+
+            const state = document.createElement("span");
+            state.className = "check-state";
+            state.textContent = displayStatus(status);
+            card.append(icon, copy, state);
+            return card;
+          }),
+        );
+      }
+
+      function renderOverall(results) {
+        const overview = results.get("overview");
+        const failedCount = [...results.values()].filter((result) => result.error).length;
+        const status = failedCount
+          ? "offline"
+          : String(overview?.data?.status || "degraded").toLowerCase();
+        elements.overall.className =
+          `overall ${status === "operational" ? "live" : status}`;
+        elements.overallText.textContent = failedCount
+          ? `${failedCount} check${failedCount === 1 ? "" : "s"} failed`
+          : status === "operational"
+            ? "All critical systems operational"
+            : "Checks complete · live data is partially degraded";
+      }
+
+      async function runChecks() {
+        elements.button.disabled = true;
+        elements.button.textContent = "Running checks…";
+        elements.lastRun.textContent = "Contacting live services";
+        elements.overall.className = "overall";
+        elements.overallText.textContent = "Checks in progress";
+
+        const settled = await Promise.all(
+          ENDPOINTS.map(async (endpoint) => {
+            try {
+              return [endpoint.id, await fetchJson(endpoint.path)];
+            } catch (error) {
+              const message =
+                error.name === "AbortError"
+                  ? "Timed out after 30 seconds"
+                  : error.message;
+              return [endpoint.id, { error: message }];
+            }
+          }),
+        );
+        const results = new Map(settled);
+        renderMetrics(results);
+        renderChecks(results);
+        renderOverall(results);
+        elements.lastRun.textContent =
+          `Last run ${new Date().toLocaleTimeString()}`;
+        elements.button.disabled = false;
+        elements.button.textContent = "Run live checks";
+      }
+
+      elements.button.addEventListener("click", runChecks);
+
+      const emptyResults = new Map(
+        ENDPOINTS.map((endpoint) => [
+          endpoint.id,
+          { error: "Not checked yet" },
+        ]),
+      );
+      renderMetrics(emptyResults);
+      renderChecks(emptyResults);
+    </script>
+  </body>
+</html>

@@ -1401,6 +1401,29 @@ input {
   margin-bottom: 18px;
 }
 
+button.brand {
+  width: 100%;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.brand .brand-icon {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+button.brand:hover .brand-icon,
+button.brand:focus-visible .brand-icon {
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 13px 32px rgba(45, 127, 249, 0.45);
+}
+
 .brand-icon {
   width: 44px;
   height: 44px;

@@ -7,7 +7,13 @@ export default function AppSidebar({
 }) {
   return (
     <aside className="sidebar">
-      <div className="brand">
+      <button
+        type="button"
+        className="brand"
+        onClick={() => onNavigate("Dashboard")}
+        aria-label="UrbanIQ home, go to the dashboard"
+        title="Go to dashboard"
+      >
         <div className="brand-icon" aria-hidden="true">
           ⌁
         </div>
@@ -17,7 +23,7 @@ export default function AppSidebar({
           </h2>
           <small>City Intelligence OS</small>
         </div>
-      </div>
+      </button>
 
       <nav aria-label="Primary navigation">
         {MENU_ITEMS.map((item) => {

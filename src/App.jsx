@@ -1522,7 +1522,7 @@ useEffect(() => {
                     <span>{route.route_id} · {route.bus_id}</span>
                     <strong>
                       {route.status === "live"
-                        ? `${route.demand_score}%`
+                        ? `${route.predicted_people} people · ${route.demand_level}`
                         : `${route.observations} samples`}
                     </strong>
                   </div>
@@ -1837,8 +1837,9 @@ useEffect(() => {
                   <div>
                     <h3>High Passenger Demand</h3>
                     <p>
-                      {bus.id} on <strong>{bus.route_name}</strong> has a{" "}
-                      {bus.demand.demand_score}% demand score.
+                      {bus.id} on <strong>{bus.route_name}</strong> is forecast at{" "}
+                      {bus.demand.predicted_people} people next hour (
+                      {bus.demand.demand_level}).
                     </p>
                     <small>
                       🤖 AI Recommendation: Increase capacity on this route.
